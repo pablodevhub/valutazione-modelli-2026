@@ -851,7 +851,14 @@ elseif($act==='insert'&&$tbl&&$curDb):
     <input type="hidden" name="act" value="insert_row"><input type="hidden" name="table" value="<?=eh($tbl)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>">
     <?php foreach($insertCols as $c):?>
     <div class="form-row">
-        <label><?=eh($c['Field'])?> <span style="color:var(--mu)">(<?=eh($c['Type'])?><?=($c['Null']==='YES'?' · NULL':'')<?=($c['Extra']?' · '.$c['Extra']:'')?>)</span></label>
+        <label><?=eh($c['Field'])?> 
+        <span style="color:var(--mu)">
+        (
+        <?=eh($c['Type'])?>
+        <?=($c['Null']==='YES'?' · NULL':'')?><?=($c['Extra']?' · '.$c['Extra']:'')?>
+        )
+        </span>
+        </label>
         <?php if(preg_match('/(blob|binary)/i',$c['Type'])):?>
             <input type="file" name="file_<?=eh($c['Field'])?>" style="color:var(--tx)"><input type="hidden" name="vals[<?=eh($c['Field'])?>][val]" value="">
         <?php elseif(preg_match('/(text|json)/i',$c['Type'])):?>
