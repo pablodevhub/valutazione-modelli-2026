@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Windows 11</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --accent: #0078d4;
+  --accent-hover: #1a86d9;
+  --bg: #202020;
+  --bg-surface: #2d2d2d;
+  --bg-card: #333;
+  --bg-hover: rgba(255,255,255,0.06);
+  --bg-active: rgba(255,255,255,0.1);
+  --border: rgba(255,255,255,0.08);
+  --border-strong: rgba(255,255,255,0.12);
+  --text: #fff;
+  --text-sec: #999;
+  --radius: 8px;
+  --radius-sm: 4px;
+  --shadow: 0 8px 32px rgba(0,0,0,0.45);
+  --font: 'Segoe UI', 'Noto Sans', system-ui, sans-serif;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);overflow:hidden;width:100vw;height:100vh;user-select:none;color:var(--text)}
+
+/* === DESKTOP === */
+#desktop{width:100%;height:100%;position:relative;background:#070710;overflow:hidden}
+.bloom{position:absolute;border-radius:50%;pointer-events:none}
+.b1{width:55vw;height:55vh;background:radial-gradient(circle,rgba(0,90,220,0.55),transparent 70%);top:28%;left:22%;filter:blur(100px);opacity:.8}
+.b2{width:40vw;height:65vh;background:radial-gradient(circle,rgba(110,35,210,0.45),transparent 70%);top:5%;left:48%;filter:blur(110px);opacity:.7}
+.b3{width:50vw;height:45vh;background:radial-gradient(circle,rgba(210,45,130,0.3),transparent 70%);top:50%;left:40%;filter:blur(120px);opacity:.6}
+.b4{width:35vw;height:35vh;background:radial-gradient(circle,rgba(0,190,190,0.2),transparent 70%);top:15%;left:10%;filter:blur(90px);opacity:.5}
+.b5{width:25vw;height:25vh;background:radial-gradient(circle,rgba(0,140,255,0.25),transparent 70%);top:65%;left:70%;filter:blur(80px);opacity:.4}
+#desktop::after{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");pointer-events:none;z-index:0}
+
+/* === DESKTOP ICONS === */
+.desktop-icons{position:absolute;top:12px;left:12px;display:flex;flex-direction:column;gap:4px;z-index:1}
+.desktop-icon{display:flex;flex-direction:column;align-items:center;width:76px;padding:8px 4px;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s}
+.desktop-icon:hover{background:rgba(255,255,255,0.08)}
+.desktop-icon:active{background:rgba(255,255,255,0.12)}
+.desktop-icon .ico{width:40px;height:40px;display:flex;align-items:center;justify-content:center;margin-bottom:4px}
+.desktop-icon .ico svg{width:36px;height:36px}
+.desktop-icon span{font-size:11px;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,0.9);line-height:1.3;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* === TASKBAR === */
+#taskbar{position:fixed;bottom:0;left:0;right:0;height:48px;background:rgba(24,24,24,0.82);backdrop-filter:blur(80px) saturate(180%);-webkit-backdrop-filter:blur(80px) saturate(180%);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 12px;z-index:9999}
+.taskbar-left{width:200px;display:flex;align-items:center}
+.taskbar-center{display:flex;align-items:center;gap:2px}
+.taskbar-right{width:240px;display:flex;align-items:center;justify-content:flex-end;gap:0}
+.taskbar-btn{width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s;position:relative;border:none;background:transparent;color:var(--text)}
+.taskbar-btn:hover{background:var(--bg-hover)}
+.taskbar-btn:active{background:var(--bg-active)}
+.taskbar-btn svg{width:20px;height:20px}
+.taskbar-btn.active::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:16px;height:3px;background:var(--accent);border-radius:2px}
+.taskbar-btn.running::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:6px;height:3px;background:var(--text-sec);border-radius:2px}
+.taskbar-btn.active.running::after{width:16px;background:var(--accent)}
+.taskbar-sep{width:1px;height:20px;background:var(--border);margin:0 4px}
+.tray-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s}
+.tray-icon:hover{background:var(--bg-hover)}
+.tray-icon svg{width:16px;height:16px;fill:var(--text)}
+.system-tray{display:flex;align-items:center;gap:0}
+.clock-area{display:flex;flex-direction:column;align-items:flex-end;padding:4px 10px;cursor:pointer;border-radius:var(--radius-sm);justify-content:center;transition:background .15s}
+.clock-area:hover{background:var(--bg-hover)}
+.clock-time{font-size:12px;line-height:1.3}
+.clock-date{font-size:11px;line-height:1.3}
+
+/* === START MENU === */
+#start-menu{position:fixed;bottom:60px;left:50%;transform:translateX(-50%) translateY(20px);width:640px;background:rgba(40,40,40,0.92);backdrop-filter:blur(100px) saturate(200%);-webkit-backdrop-filter:blur(100px) saturate(200%);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);z-index:10000;opacity:0;visibility:hidden;transition:opacity .2s ease,transform .2s ease,visibility .2s;overflow:hidden;display:flex;flex-direction:column}
+#start-menu.open{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0)}
+.start-search{margin:24px 28px 16px;position:relative}
+.start-search input{width:100%;height:36px;background:rgba(255,255,255,0.05);border:1px solid var(--border-strong);border-radius:20px;padding:0 16px 0 40px;color:var(--text);font-size:13px;font-family:var(--font);outline:none;transition:border-color .2s}
+.start-search input:focus{border-color:var(--accent)}
+.start-search input::placeholder{color:var(--text-sec)}
+.start-search .search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:16px;height:16px}
+.start-section{padding:0 28px;margin-bottom:8px}
+.start-section-title{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.see-all{font-size:12px;font-weight:400;color:var(--text-sec);cursor:pointer;padding:3px 10px;border-radius:var(--radius-sm);transition:background .15s;background:transparent;border:none;font-family:var(--font)}
+.see-all:hover{background:var(--bg-hover)}
+.pinned-apps{display:grid;grid-template-columns:repeat(6,1fr);gap:2px}
+.pinned-app{display:flex;flex-direction:column;align-items:center;padding:12px 6px;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s;background:transparent;border:none;color:var(--text);font-family:var(--font)}
+.pinned-app:hover{background:var(--bg-hover)}
+.pinned-app:active{background:var(--bg-active)}
+.pinned-app svg,.pinned-app .app-ico{width:32px;height:32px;margin-bottom:6px}
+.pinned-app span{font-size:11px;text-align:center;line-height:1.2}
+.recommended-list{display:grid;grid-template-columns:repeat(2,1fr);gap:2px}
+.rec-item{display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s}
+.rec-item:hover{background:var(--bg-hover)}
+.rec-icon{width:32px;height:32px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.05);flex-shrink:0}
+.rec-icon svg{width:18px;height:18px}
+.rec-info{display:flex;flex-direction:column;overflow:hidden}
+.rec-name{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-detail{font-size:11px;color:var(--text-sec)}
+.start-footer{display:flex;justify-content:space-between;align-items:center;padding:12px 28px;border-top:1px solid var(--border);margin-top:auto}
+.start-user{display:flex;align-items:center;gap:10px;padding:6px 12px;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s;border:none;background:transparent;color:var(--text);font-family:var(--font);font-size:13px}
+.start-user:hover{background:var(--bg-hover)}
+.user-avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center}
+.user-avatar svg{width:16px;height:16px;fill:white}
+.start-power{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s;background:transparent;border:none}
+.start-power:hover{background:var(--bg-hover)}
+.start-power svg{width:18px;height:18px;fill:var(--text)}
+
+/* === CONTEXT MENU === */
+#context-menu{position:fixed;background:rgba(44,44,44,0.94);backdrop-filter:blur(100px) saturate(200%);-webkit-backdrop-filter:blur(100px) saturate(200%);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);min-width:240px;padding:4px;z-index:20000;opacity:0;visibility:hidden;transition:opacity .12s,visibility .12s}
+#context-menu.open{opacity:1;visibility:visible}
+.ctx-item{display:flex;align-items:center;gap:12px;padding:8px 14px;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;transition:background .1s;background:transparent;border:none;width:100%;color:var(--text);font-family:var(--font);text-align:left}
+.ctx-item:hover{background:var(--bg-hover)}
+.ctx-item svg{width:16px;height:16px;opacity:.7;flex-shrink:0}
+.ctx-item .shortcut{margin-left:auto;font-size:11px;colorgap:4px:var(--text-sec)}
+.ctx-sep{height:1px;background:var(--border);margin:4px 10px}
+
+/* === WINDOWS === */
+.window{position:absolute;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border);box-shadow:var(--shadow);display:none;flex-direction:column;overflow:hidden;min-width:380px;min-height:260px}
+.window.open{display:flex;animation:winOpen .2s ease forwards}
+.window.maximized{top:0!important;left:0!important;width:100%!important;height:calc(100vh - 48px)!important;border-radius:0;border:none}
+.window.minimized{display:none!important}
+@keyframes winOpen{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.win-header{display:flex;align-items:center;height:36px;padding:0 4px 0 12px;background:rgba(32,32,3;padding:6px 12px;background:rgba(40,40,40,0.6);border-bottom:1px solid var(--border)}
+.explorer-toolbar button{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s;border:none;background:transparent;color:var(--text)}
+.explorer-toolbar button:hover{background:var(--bg-hover)}
+.explorer-toolbar button svg{width:14px;height:14px}
+.explorer-address{flex:1;height:30px;background:rgba(255,255,255,0.05);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:0 10px;color:var(--text);font-size:12px;font-family:var(--font);outline:none;margin:0 4px}
+.explorer-address:focus{border-color:var(--accent)}
+.explorer-main{display:flex;flex:1;overflow:hidden2,0.5);flex-shrink:0;cursor:default}
+.win-header .win-icon{width:16px;height:16px;margin-right:8px;display:flex;align-items:center;justify-content:center}
+.win-header .win-icon svg{width:14px;height:14px}
+.win-header .win-title{font-size:12px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.win-controls{display:flex;align-items:center;height:100%;margin-left:auto}
+.win-ctrl{width:46px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .1s;border:none;background:transparent;color:var(--text);border-radius:0}
+.win-ctrl:hover{background:rgba(255,255,255,0.08)}
+.win-ctrl svg{width:10px;height:10px}
+.win-ctrl.close:hover{background:#c42b1c}
+.win-body{flex:1;overflow:auto;position:relative;display:flex;flex-direction:column}
+
+/* Explorer */
+.explorer-toolbar{display:flex;align-items:center;}
+.explorer-sidebar{width:200px;padding:8px;border-right:1px solid var(--border);overflow-y:auto;flex-shrink:0}
+.sidebar-item{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;font-size:12px;transition:background .15s;background:transparent;border:none;color:var(--text);font-family:var(--font);width:100%;text-align:left}
+.sidebar-item:hover{background:var(--bg-hover)}
+.sidebar-item.active{background:var(--bg-active)}
+.sidebar-item svg{width:16px;height:16px;flex-shrink:0}
+.sidebar-section{font-size:11px;font-weight:600;color:var(--text-sec);padding:14px 10px 4px;text-transform:uppercase;letter-spacing:.5px}
+.explorer-files{flex:1;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:4px;align-content:start;overflow-y:auto}
+.file-item{display:flex;flex-direction:column;align-items:center;padding:10px 6px;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s}
+.file-item:hover{background:var(--bg-hover)}
+.file-item.selected{background:rgba(0,120,212,0.2)}
+.file-item svg{width:36px;height:36px;margin-bottom:6px}
+.file-item span{font-size:11px;text-align:center;line-height:1.3;word-break:break-all;max-width:80px}
+
+/* Notepad */
+.notepad-menu{display:flex;gap:0;padding:0 8px;background:rgba(40,40,40,0.6);border-bottom:1px solid var(--border)}
+.notepad-menu-item{padding:6px 10px;font-size:12px;cursor:pointer;border-radius:var(--radius-sm);transition:background .15s;background:transparent;border:none;color:var(--text);font-family:var(--font)}
+.notepad-menu-item:hover{background:var(--bg-hover)}
+.notepad-textarea{width:100%;flex:1;background:transparent;border:none;color:var(--text);font-family:'Consolas','Courier New',monospace;font-size:14px;padding:12px;resize:none;outline:none;line-height:1.6;min-height:0}
+
+/* Calculator */
+.calc-container{display:flex;flex-direction:column;height:100%;padding:8px}
+.calc-display{padding:16px 12px 10px;text-align:right;flex-shrink:0}
+.calc-expression{font-size:13px;color:var(--text-sec);min-height:20px;margin-bottom:2px}
+.calc-result{font-size:38px;font-weight:300;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.calc-buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;flex:1;padding:4px 0}
+.calc-btn{display:flex;align-items:center;justify-content:center;border:none;border-radius:var(--radius-sm);font-family:var(--font);font-size:15px;cursor:pointer;transition:background .1s;background:rgba(255,255,255,0.06);color:var(--text);min-height:44px}
+.calc-btn:hover{background:rgba(255,255,255,0.1)}
+.calc-btn:active{background:rgba(255,255,255,0.16)}
+.calc-btn.op{background:rgba(255,255,255,0.04)}
+.calc-btn.op:hover{background:rgba(255,255,255,0.08)}
+.calc-btn.eq{background:var(--accent);color:#fff}
+.calc-btn.eq:hover{background:var(--accent-hover)}
+
+/* Settings */
+.settings-wrap{padding:28px;overflow-y:auto;flex:1}
+.settings-header{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+.settings-header svg{width:28px;height:28px}
+.settings-header h2{font-size:24px;font-weight:400}
+.settings-search{width:100%;height:36px;background:rgba(255,255,255,0.05);border:1px solid var(--border-strong);border-radius:20px;padding:0 16px;color:var(--text);font-size:13px;font-family:var(--font);outline:none;margin-bottom:20px;transition:border-color .2s}
+.settings-search:focus{border-color:var(--accent)}
+.settings-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4px}
+.s-card{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:var(--radius);cursor:pointer;transition:background .15s}
+.s-card:hover{background:var(--bg-hover)}
+.s-card .s-ico{width:36px;height:36px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.s-card .s-ico svg{width:22px;height:22px}
+.s-card h3{font-size:14px;font-weight:500;margin-bottom:2px}
+.s-card p{font-size:12px;color:var(--text-sec)}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.12);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.22)}
+::selection{background:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+
+<div id="desktop">
+  <!-- Bloom wallpaper -->
+  <div class="bloom b1"></div>
+  <div class="bloom b2"></div>
+  <div class="bloom b3"></div>
+  <div class="bloom b4"></div>
+  <div class="bloom b5"></div>
+
+  <!-- Desktop Icons -->
+  <div class="desktop-icons">
+    <div class="desktop-icon" ondblclick="openApp('explorer')">
+      <div class="ico"><svg viewBox="0 0 48 48"><rect x="4" y="10" width="40" height="30" rx="3" fill="#e8a317" opacity=".9"/><rect x="4" y="6" width="18" height="8" rx="2" fill="#f0b840"/><rect x="4" y="10" width="40" height="2" fill="#d4940e"/></svg></div>
+      <span>Questo PC</span>
+    </div>
+    <div class="desktop-icon" ondblclick="openApp('edge')">
+      <div class="ico"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="18" fill="#0078d4"/><path d="M16 30c0-8 6-14 14-14 4 0 7 1.5 9 4-3-2-6-3-10-3-7 0-11 5-11 11 0 3 1 5 3 7-4-2-5-5-5-5z" fill="#50e6ff" opacity=".8"/><circle cx="28" cy="20" r="6" fill="#fff" opacity=".3"/></svg></div>
+      <span>Microsoft Edge</span>
+    </div>
+    <div class="desktop-icon">
+      <div class="ico"><svg viewBox="0 0 48 48"><rect x="8" y="8" width="32" height="32" rx="4" fill="#555" opacity=".6"/><path d="M18 18l12 12M30 18l-12 12" stroke="#aaa" stroke-width="2.5" stroke-linecap="round"/></svg></div>
+      <span>Cestino</span>
+    </div>
+    <div class="desktop-icon" ondblclick="openApp('notepad')">
+      <div class="ico"><svg viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="3" fill="#4a90d9"/><rect x="14" y="14" width="20" height="2" rx="1" fill="#fff" opacity=".6"/><rect x="14" y="20" width="16" height="2" rx="1" fill="#fff" opacity=".6"/><rect x="14" y="26" width="18" height="2" rx="1" fill="#fff" opacity=".6"/><rect x="14" y="32" width="12" height="2" rx="1" fill="#fff" opacity=".6"/></svg></div>
+      <span>Blocco Note</span>
+    </div>
+  </div>
+
+  <!-- FILE EXPLORER WINDOW -->
+  <div class="window" id="win-explorer" style="left:100px;top:40px;width:820px;height:500px">
+    <div class="win-header" onmousedown="startDrag('explorer',event)">
+      <div class="win-icon"><svg viewBox="0 0 20 20"><rect x="1" y="5" width="18" height="12" rx="2" fill="#e8a317" opacity=".9"/><rect x="1" y="3" width="8" height="5" rx="1.5" fill="#f0b840"/></svg></div>
+      <span class="win-title">Esplora file</span>
+      <div class="win-controls">
+        <button class="win-ctrl" onclick="minimizeWindow('explorer')"><svg viewBox="0 0 10 10"><line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1.2"/></svg></button>
+        <button class="win-ctrl" onclick="maximizeWindow('explorer')"><svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/></svg></button>
+        <button class="win-ctrl close" onclick="closeWindow('explorer')"><svg viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      </div>
+    </div>
+    <div class="win-body">
+      <div class="explorer-toolbar">
+        <button><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2L4 8l6 6"/></svg></button>
+        <button><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2l6 6-6 6"/></svg></button>
+        <button><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 12V4M4 7l4-4 4 4"/></svg></button>
+        <input class="explorer-address" value="Questo PC" readonly>
+      </div>
+      <div class="explorer-main">
+        <div class="explorer-sidebar">
+          <div class="sidebar-section">Accesso rapido</div>
+          <button class="sidebar-item active"><svg viewBox="0 0 16 16"><rect x="2" y="6" width="12" height="8" rx="1.5" fill="#e8a317"/><rect x="2" y="4" width="5" height="4" rx="1" fill="#f0b840"/></svg>Desktop</button>
+          <button class="sidebar-item"><svg viewBox="0 0 16 16"><rect x="2" y="4" width="12" height="10" rx="1.5" fill="#e8a317"/><rect x="2" y="2" width="6" height="4" rx="1" fill="#f0b840"/></svg>Documenti</button>
+          <button class="sidebar-item"><svg viewBox="0 0 16 16"><path d="M8 2v8M5 7l3 3 3-3" stroke="#4a90d9" stroke-width="1.5" fill="none" stroke-linecap="round"/><rect x="3" y="12" width="10" height="2" rx="1" fill="#4a90d9"/></svg>Download</button>
+          <button class="sidebar-item"><svg viewBox="0 0 16 16"><rect x="2" y="4" width="12" height="10" rx="1.5" fill="#e8a317"/><rect x="2" y="2" width="6" height="4" rx="1" fill="#f0b840"/></svg>Immagini</button>
+          <div class="sidebar-section">Questo PC</div>
+          <button class="sidebar-item"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="#4a90d9"/><rect x="4" y="5" width="8" height="1" rx=".5" fill="#fff" opacity=".3"/></svg>Disco locale (C:)</button>
+          <button class="sidebar-item"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="#6ab04c"/><rect x="4" y="5" width="8" height="1" rx=".5" fill="#fff" opacity=".3"/></svg>Disco dati (D:)</button>
+        </div>
+        <div class="explorer-files">
+          <div class="file-item" onclick="selectFile(this)"><svg viewBox="0 0 48 48"><rect x="6" y="12" width="36" height="28" rx="3" fill="#e8a317" opacity=".9"/><rect x="6" y="8" width="16" height="8" rx="2" fill="#f0b840"/></svg><span>Desktop</span></div>
+          <div class="file-item" onclick="selectFile(this)"><svg viewBox="0 0 48 48"><rect x="6" y="12" width="36" height="28" rx="3" fill="#e8a317" opacity=".9"/><rect x="6" y="8" width="16" height="8" rx="2" fill="#f0b840"/></svg><span>Documenti</span></div>
+          <div class="file-item" onclick="selectFile(this)"><svg viewBox="0 0 48 48"><rect x="6" y="12" width="36" height="28" rx="3" fill="#e8a317" opacity=".9"/><rect x="6" y="8" width="16" height="8" rx="2" fill="#f0b840"/></svg><span>Download</span></div>
+          <div class="file-item" onclick="selectFile(this)"><svg viewBox="0 0 48 48"><rect x="6" y="12" width="36" height="28" rx="3" fill="#e8a317" opacity=".9"/><rect x="6" y="8" width="16" height="8" rx="2" fill="#f0b840"/></svg><span>Immagini</span></div>
+          <div class="file-item" onclick="selectFile(this)"><svg viewBox="0 0 48 48"><rect x="6" y="12" width="36" height="28" rx="3" fill="#e8a317" opacity=".9"/><rect x="6" y="8" width="16" height="8" rx="2" fill="#f0b840"/></svg><span>Musica</span></div>
+          <div class="file-item" onclick="selectFile(this)"><svg viewBox="0 0 48 48"><rect x="6" y="12" width="36" height="28" rx="3" fill="#e8a317" opacity=".9"/><rect x="6" y="8" width="16" height="8" rx="2" fill="#f0b840"/></svg><span>Video</span></div>
+          <div class="file-item" onclick="selectFile(this)"><svg viewBox="0 0 48 48"><rect x="8" y="4" width="32" height="40" rx="3" fill="#4a90d9"/><rect x="12" y="12" width="24" height="2" rx="1" fill="#fff" opacity=".4"/><rect x="12" y="18" width="18" height="2" rx="1" fill="#fff" opacity=".4"/><rect x="12" y="24" width="22" height="2" rx="1" fill="#fff" opacity=".4"/><rect x="12" y="30" width="14" height="2" rx="1" fill="#fff" opacity=".4"/></svg><span>Progetto.docx</span></div>
+          <div class="file-item" onclick="selectFile(this)"><svg viewBox="0 0 48 48"><rect x="8" y="4" width="32" height="40" rx="3" fill="#217346"/><rect x="14" y="14" width="20" height="2" rx="1" fill="#fff" opacity=".4"/><rect x="14" y="20" width="16" height="2" rx="1" fill="#fff" opacity=".4"/><rect x="14" y="26" width="18" height="2" rx="1" fill="#fff" opacity=".4"/></svg><span>Bilancio.xlsx</span></div>
+          <div class="file-item" onclick="selectFile(this)"><svg viewBox="0 0 48 48"><rect x="8" y="4" width="32" height="40" rx="3" fill="#d24726"/><circle cx="24" cy="24" r="8" fill="#fff" opacity=".2"/></svg><span>Presentazione.pptx</span></div>
+          <div class="file-item" onclick="selectFile(this)"><svg viewBox="0 0 48 48"><rect x="8" y="4" width="32" height="40" rx="3" fill="#555"/><circle cx="24" cy="22" r="8" fill="#4a90d9" opacity=".4"/><path d="M20 20l8 8" stroke="#fff" stroke-width="1.5" opacity=".5"/></svg><span>foto.jpg</span></div>
+          <div class="file-item" onclick="selectFile(this)"><svg viewBox="0 0 48 48"><rect x="8" y="4" width="32" height="40" rx="3" fill="#888"/><path d="M16 16h16v4H16zM18 24h12v2H18zM20 30h8v2H20z" fill="#fff" opacity=".3"/></svg><span>archivio.zip</span></div>
+          <div class="file-item" onclick="selectFile(this)"><svg viewBox="0 0 48 48"><rect x="8" y="4" width="32" height="40" rx="3" fill="#555"/><path d="M18 18h12l-6 8z" fill="#4a90d9" opacity=".5"/><circle cx="24" cy="30" r="3" fill="#fff" opacity=".3"/></svg><span>setup.exe</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTEPAD WINDOW -->
+  <div class="window" id="win-notepad" style="left:220px;top:80px;width:640px;height:420px">
+    <div class="win-header" onmousedown="startDrag('notepad',event)">
+      <div class="win-icon"><svg viewBox="0 0 20 20"><rect x="4" y="2" width="12" height="16" rx="2" fill="#4a90d9"/><rect x="6" y="6" width="8" height="1" rx=".5" fill="#fff" opacity=".5"/><rect x="6" y="9" width="6" height="1" rx=".5" fill="#fff" opacity=".5"/><rect x="6" y="12" width="7" height="1" rx=".5" fill="#fff" opacity=".5"/></svg></div>
+      <span class="win-title">Blocco Note</span>
+      <div class="win-controls">
+        <button class="win-ctrl" onclick="minimizeWindow('notepad')"><svg viewBox="0 0 10 10"><line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1.2"/></svg></button>
+        <button class="win-ctrl" onclick="maximizeWindow('notepad')"><svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/></svg></button>
+        <button class="win-ctrl close" onclick="closeWindow('notepad')"><svg viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      </div>
+    </div>
+    <div class="win-body">
+      <div class="notepad-menu">
+        <button class="notepad-menu-item">File</button>
+        <button class="notepad-menu-item">Modifica</button>
+        <button class="notepad-menu-item">Formato</button>
+        <button class="notepad-menu-item">Visualizza</button>
+        <button class="notepad-menu-item">?</button>
+      </div>
+      <textarea class="notepad-textarea" placeholder="Digita qui il tuo testo...">Benvenuto in Windows 11 Simulator!
+
+Questo è un esempio di Blocco Note.
+Puoi scrivere qualsiasi testo qui.
+
+Prova a:
+- Aprire il menu Start cliccando sul logo Windows
+- Trascinare le finestre
+- Cliccare con il tasto destro sul desktop
+- Aprire la Calcolatrice e fare dei calcoli
+- Ingrandire/minimizzare le finestre</textarea>
+    </div>
+  </div>
+
+  <!-- CALCULATOR WINDOW -->
+  <div class="window" id="win-calculator" style="left:620px;top:60px;width:320px;height:500px">
+    <div class="win-header" onmousedown="startDrag('calculator',event)">
+      <div class="win-icon"><svg viewBox="0 0 20 20"><rect x="3" y="2" width="14" height="16" rx="2" fill="#1e1e1e" stroke="#555" stroke-width=".5"/><rect x="5" y="4" width="10" height="4" rx="1" fill="#333"/><rect x="5" y="10" width="2.2" height="2" rx=".5" fill="#666"/><rect x="8.9" y="10" width="2.2" height="2" rx=".5" fill="#666"/><rect x="12.8" y="10" width="2.2" height="2" rx=".5" fill="#666"/><rect x="5" y="13.5" width="2.2" height="2" rx=".5" fill="#666"/><rect x="8.9" y="13.5" width="2.2" height="2" rx=".5" fill="#666"/><rect x="12.8" y="13.5" width="2.2" height="2" rx=".5" fill="#0078d4"/></svg></div>
+      <span class="win-title">Calcolatrice</span>
+      <div class="win-controls">
+        <button class="win-ctrl" onclick="minimizeWindow('calculator')"><svg viewBox="0 0 10 10"><line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1.2"/></svg></button>
+        <button class="win-ctrl" onclick="maximizeWindow('calculator')"><svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/></svg></button>
+        <button class="win-ctrl close" onclick="closeWindow('calculator')"><svg viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      </div>
+    </div>
+    <div class="win-body">
+      <div class="calc-container">
+        <div class="calc-display">
+          <div class="calc-expression" id="calc-expr"></div>
+          <div class="calc-result" id="calc-result">0</div>
+        </div>
+        <div class="calc-buttons">
+          <button class="calc-btn op" onclick="calcPercent()">%</button>
+          <button class="calc-btn op" onclick="calcClearEntry()">CE</button>
+          <button class="calc-btn op" onclick="calcClear()">C</button>
+          <button class="calc-btn op" onclick="calcBackspace()">&#9003;</button>
+          <button class="calc-btn op" onclick="calcReciprocal()">1/x</button>
+          <button class="calc-btn op" onclick="calcSquare()">x²</button>
+          <button class="calc-btn op" onclick="calcSqrt()">√x</button>
+          <button class="calc-btn op" onclick="calcOp('÷')">÷</button>
+          <button class="calc-btn" onclick="calcInput('7')">7</button>
+          <button class="calc-btn" onclick="calcInput('8')">8</button>
+          <button class="calc-btn" onclick="calcInput('9')">9</button>
+          <button class="calc-btn op" onclick="calcOp('×')">×</button>
+          <button class="calc-btn" onclick="calcInput('4')">4</button>
+          <button class="calc-btn" onclick="calcInput('5')">5</button>
+          <button class="calc-btn" onclick="calcInput('6')">6</button>
+          <button class="calc-btn op" onclick="calcOp('-')">−</button>
+          <button class="calc-btn" onclick="calcInput('1')">1</button>
+          <button class="calc-btn" onclick="calcInput('2')">2</button>
+          <button class="calc-btn" onclick="calcInput('3')">3</button>
+          <button class="calc-btn op" onclick="calcOp('+')">+</button>
+          <button class="calc-btn" onclick="calcNegate()">±</button>
+          <button class="calc-btn" onclick="calcInput('0')">0</button>
+          <button class="calc-btn" onclick="calcInput('.')">.</button>
+          <button class="calc-btn eq" onclick="calcEquals()">=</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS WINDOW -->
+  <div class="window" id="win-settings" style="left:160px;top:50px;width:720px;height:520px">
+    <div class="win-header" onmousedown="startDrag('settings',event)">
+      <div class="win-icon"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="4" fill="none" stroke="#aaa" stroke-width="1.5"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3M3.5 3.5l2 2M14.5 14.5l2 2M16.5 3.5l-2 2M5.5 14.5l-2 2" stroke="#aaa" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+      <span class="win-title">Impostazioni</span>
+      <div class="win-controls">
+        <button class="win-ctrl" onclick="minimizeWindow('settings')"><svg viewBox="0 0 10 10"><line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1.2"/></svg></button>
+        <button class="win-ctrl" onclick="maximizeWindow('settings')"><svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/></svg></button>
+        <button class="win-ctrl close" onclick="closeWindow('settings')"><svg viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      </div>
+    </div>
+    <div class="win-body">
+      <div class="settings-wrap">
+        <div class="settings-header">
+          <svg viewBox="0 0 28 28" fill="#aaa"><circle cx="14" cy="14" r="5" fill="none" stroke="#aaa" stroke-width="2"/><path d="M14 2v4M14 22v4M2 14h4M22 14h4M5.6 5.6l2.8 2.8M19.6 19.6l2.8 2.8M22.4 5.6l-2.8 2.8M8.4 19.6l-2.8 2.8" stroke="#aaa" stroke-width="2" stroke-linecap="round"/></svg>
+          <h2>Impostazioni</h2>
+        </div>
+        <input class="settings-search" placeholder="Cerca nelle impostazioni">
+        <div class="settings-grid">
+          <div class="s-card">
+            <div class="s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="1.5"><rect x="3" y="4" width="18" height="14" rx="2"/><line x1="3" y1="18" x2="21" y2="18"/><line x1="8" y1="22" x2="16" y2="22"/><line x1="12" y1="18" x2="12" y2="22"/></svg></div>
+            <div><h3>Sistema</h3><p>Display, suono, notifiche, alimentazione</p></div>
+          </div>
+          <div class="s-card">
+            <div class="s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#6ab04c" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="18" r="1.5" fill="#6ab04c"/></svg></div>
+            <div><h3>Bluetooth e dispositivi</h3><p>Bluetooth, mouse, tastiera, stampanti</p></div>
+          </div>
+          <div class="s-card">
+            <div class="s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#4a90d9" stroke-width="1.5"><path d="M12 20v-8M8 16l4-4 4 4"/><circle cx="12" cy="4" r="2"/></svg></div>
+            <div><h3>Rete e Internet</h3><p>Wi-Fi, VPN, proxy, traffico dati</p></div>
+          </div>
+          <div class="s-card">
+            <div class="s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#e8a317" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="4"/></svg></div>
+            <div><h3>Personalizzazione</h3><p>Sfondo, colori, tema, barra delle applicazioni</p></div>
+          </div>
+          <div class="s-card">
+            <div class="s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#d24726" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg></div>
+            <div><h3>App</h3><p>App predefinite, app installate, funzionalità</p></div>
+          </div>
+          <div class="s-card">
+            <div class="s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#9b59b6" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></div>
+            <div><h3>Account</h3><p>Il tuo account, e-mail, accesso, famiglia</p></div>
+          </div>
+          <div class="s-card">
+            <div class="s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#00b894" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+            <div><h3>Ora e lingua</h3><p>Data e ora, lingua, digitazione, regione</p></div>
+          </div>
+          <div class="s-card">
+            <div class="s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#e17055" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></div>
+            <div><h3>Accessibilità</h3><p>Display, audio, interazione, visione</p></div>
+          </div>
+          <div class="s-card">
+            <div class="s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fdcb6e" stroke-width="1.5"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/><circle cx="12" cy="16" r="1.5" fill="#fdcb6e"/></svg></div>
+            <div><h3>Privacy e sicurezza</h3><p>Posizione, fotocamera, microfono, dati</p></div>
+          </div>
+          <div class="s-card">
+            <div class="s-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#74b9ff" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+            <div><h3>Windows Update</h3><p>Aggiornamenti, cronologia, opzioni avanzate</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- START MENU -->
+<div id="start-menu">
+  <div class="start-search">
+    <svg class="search-icon" viewBox="0 0 16 16" fill="none" stroke="#999" stroke-width="1.5"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>
+    <input type="text" placeholder="Cerca app, impostazioni e documenti">
+  </div>
+  <div class="start-section">
+    <div class="start-section-title">Aggiungi a Start<button class="see-all">Tutto ›</button></div>
+    <div class="pinned-apps">
+      <button class="pinned-app" onclick="openApp('edge');closeStartMenu()">
+        <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#0078d4"/><path d="M10 22c0-7 5-12 11-12 3.5 0 6 1.3 7.5 3.3-2.5-1.7-5-2.5-8.5-2.5-6 0-9 4-9 9 0 2.5 1 4.5 2.5 6-2.5-1.5-3.5-3.8-3.5-3.8z" fill="#50e6ff" opacity=".7"/></svg>
+        <span>Edge</span>
+      </button>
+      <button class="pinned-app" onclick="openApp('explorer');closeStartMenu()">
+        <svg viewBox="0 0 32 32"><rect x="3" y="8" width="26" height="20" rx="2.5" fill="#e8a317" opacity=".9"/><rect x="3" y="5" width="12" height="6" rx="2" fill="#f0b840"/></svg>
+        <span>Esplora file</span>
+      </button>
+      <button class="pinned-app" onclick="openApp('notepad');closeStartMenu()">
+        <svg viewBox="0 0 32 32"><rect x="6" y="3" width="20" height="26" rx="2.5" fill="#4a90d9"/><rect x="10" y="10" width="12" height="1.5" rx=".75" fill="#fff" opacity=".5"/><rect x="10" y="14" width="9" height="1.5" rx=".75" fill="#fff" opacity=".5"/><rect x="10" y="18" width="10" height="1.5" rx=".75" fill="#fff" opacity=".5"/></svg>
+        <span>Blocco Note</span>
+      </button>
+      <button class="pinned-app" onclick="openApp('calculator');closeStartMenu()">
+        <svg viewBox="0 0 32 32"><rect x="6" y="3" width="20" height="26" rx="3" fill="#1e1e1e" stroke="#555" stroke-width=".5"/><rect x="9" y="6" width="14" height="6" rx="1.5" fill="#333"/><rect x="9" y="14" width="3" height="2.5" rx=".5" fill="#555"/><rect x="14.5" y="14" width="3" height="2.5" rx=".5" fill="#555"/><rect x="20" y="14" width="3" height="2.5" rx=".5" fill="#555"/><rect x="9" y="18.5" width="3" height="2.5" rx=".5" fill="#555"/><rect x="14.5" y="18.5" width="3" height="2.5" rx=".5" fill="#555"/><rect x="20" y="18.5" width="3" height="2.5" rx=".5" fill="#0078d4"/><rect x="9" y="23" width="3" height="2.5" rx=".5" fill="#555"/><rect x="14.5" y="23" width="3" height="2.5" rx=".5" fill="#555"/><rect x="20" y="23" width="3" height="2.5" rx=".5" fill="#555"/></svg>
+        <span>Calcolatrice</span>
+      </button>
+      <button class="pinned-app" onclick="openApp('settings');closeStartMenu()">
+        <svg viewBox="0 0 32 32" fill="none" stroke="#aaa" stroke-width="1.5"><circle cx="16" cy="16" r="5.5"/><path d="M16 3v5M16 24v5M3 16h5M24 16h5M7.1 7.1l3.5 3.5M21.4 21.4l3.5 3.5M24.9 7.1l-3.5 3.5M10.6 21.4l-3.5 3.5" stroke-linecap="round"/></svg>
+        <span>Impostazioni</span>
+      </button>
+      <button class="pinned-app">
+        <svg viewBox="0 0 32 32"><rect x="4" y="4" width="24" height="24" rx="4" fill="#00a4ef"/><text x="16" y="22" text-anchor="middle" fill="#fff" font-size="14" font-weight="700" font-family="sans-serif">W</text></svg>
+        <span>Microsoft Store</span>
+      </button>
+    </div>
+  </div>
+  <div class="start-section">
+    <div class="start-section-title">Consigliati<button class="see-all">Tutto ›</button></div>
+    <div class="recommended-list">
+      <div class="rec-item">
+        <div class="rec-icon"><svg viewBox="0 0 20 20"><rect x="3" y="2" width="14" height="16" rx="2" fill="#4a90d9"/><rect x="5" y="5" width="10" height="1" rx=".5" fill="#fff" opacity=".5"/><rect x="5" y="8" width="7" height="1" rx=".5" fill="#fff" opacity=".5"/></svg></div>
+        <div class="rec-info"><span class="rec-name">Progetto.docx</span><span class="rec-detail">Modificato di recente</span></div>
+      </div>
+      <div class="rec-item">
+        <div class="rec-icon"><svg viewBox="0 0 20 20"><rect x="3" y="2" width="14" height="16" rx="2" fill="#217346"/></svg></div>
+        <div class="rec-info"><span class="rec-name">Bilancio.xlsx</span><span class="rec-detail">Ieri</span></div>
+      </div>
+      <div class="rec-item">
+        <div class="rec-icon"><svg viewBox="0 0 20 20"><rect x="3" y="2" width="14" height="16" rx="2" fill="#555"/><circle cx="10" cy="10" r="4" fill="#4a90d9" opacity=".4"/></svg></div>
+        <div class="rec-info"><span class="rec-name">foto_vacanza.jpg</span><span class="rec-detail">La settimana scorsa</span></div>
+      </div>
+      <div class="rec-item">
+        <div class="rec-icon"><svg viewBox="0 0 20 20"><rect x="3" y="2" width="14" height="16" rx="2" fill="#d24726"/></svg></div>
+        <div class="rec-info"><span class="rec-name">Presentazione.pptx</span><span class="rec-detail">15/04/2025</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="start-footer">
+    <button class="start-user">
+      <div class="user-avatar"><svg viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="3.5"/><path d="M1.5 15c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"/></svg></div>
+      <span>Utente</span>
+    </button>
+    <button class="start-power" title="Spegni">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 2v8"/><path d="M5.5 5a7 7 0 109 0"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- CONTEXT MENU -->
+<div id="context-menu">
+  <button class="ctx-item"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 8h8M8 4v8"/></svg>Visualizza<span class="shortcut"></span></button>
+  <button class="ctx-item"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 4h10M3 8h10M3 12h10"/></svg>Ordina per<span class="shortcut"></span></button>
+  <button class="ctx-item"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="3" width="10" height="10" rx="2"/><rect x="5" y="5" width="6" height="6" rx="1"/></svg>Aggiorna<span class="shortcut">F5</span></button>
+  <div class="ctx-sep"></div>
+  <button class="ctx-item"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="1" width="12" height="14" rx="1.5"/><path d="M5 5h6M5 8h6M5 11h4"/></svg>Nuovo<span class="shortcut"></span></button>
+  <div class="ctx-sep"></div>
+  <button class="ctx-item"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="3" width="10" height="10" rx="1.5"/><path d="M6 6h4v4H6z"/></svg>Copia<span class="shortcut">Ctrl+C</span></button>
+  <button class="ctx-item"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg>Incolla<span class="shortcut">Ctrl+V</span></button>
+  <div class="ctx-sep"></div>
+  <button class="ctx-item" onclick="openApp('settings');closeCtxMenu()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>Personalizza<span class="shortcut"></span></button>
+  <button class="ctx-item" onclick="openApp('settings');closeCtxMenu()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2"/></svg>Altro<span class="shortcut"></span></button>
+</div>
+
+<!-- TASKBAR -->
+<div id="taskbar">
+  <div class="taskbar-left"></div>
+  <div class="taskbar-center">
+    <button class="taskbar-btn start-btn" onclick="toggleStartMenu()" title="Start">
+      <svg viewBox="0 0 20 20" fill="currentColor"><rect x="1" y="1" width="8" height="8" rx="1.5"/><rect x="11" y="1" width="8" height="8" rx="1.5"/><rect x="1" y="11" width="8" height="8" rx="1.5"/><rect x="11" y="11" width="8" height="8" rx="1.5"/></svg>
+    </button>
+    <button class="taskbar-btn" title="Cerca" onclick="toggleStartMenu()">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8.5" cy="8.5" r="6"/><path d="M13 13l5 5" stroke-linecap="round"/></svg>
+    </button>
+    <button class="taskbar-btn" title="Attività">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="11" height="14" rx="2"/><rect x="8" y="1" width="11" height="14" rx="2"/></svg>
+    </button>
+    <button class="taskbar-btn" title="Widget">
+      <svg viewBox="0 0 20 20" fill="currentColor" opacity=".9"><rect x="1" y="1" width="8" height="8" rx="2"/><rect x="11" y="1" width="8" height="3.5" rx="1"/><rect x="11" y="6.5" width="8" height="2.5" rx="1"/><rect x="1" y="11" width="18" height="8" rx="2"/></svg>
+    </button>
+    <div class="taskbar-sep"></div>
+    <button class="taskbar-btn" data-app="explorer" onclick="toggleApp('explorer')" title="Esplora file">
+      <svg viewBox="0 0 20 20"><rect x="1" y="5" width="18" height="12" rx="2" fill="#e8a317" opacity=".9"/><rect x="1" y="3" width="8" height="5" rx="1.5" fill="#f0b840"/></svg>
+    </button>
+    <button class="taskbar-btn" data-app="edge" onclick="toggleApp('edge')" title="Microsoft Edge">
+      <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="#0078d4"/><path d="M6 14c0-5 3.5-9 8-9 2.5 0 4 1 5 2.2-2-1.3-3.5-1.8-6-1.8-4.5 0-6.5 3-6.5 6.5 0 1.8.7 3.2 1.8 4.3-1.3-.8-2.3-2.2-2.3-2.2z" fill="#50e6ff" opacity=".7"/></svg>
+    </button>
+    <button class="taskbar-btn" data-app="notepad" onclick="toggleApp('notepad')" title="Blocco Note">
+      <svg viewBox="0 0 20 20"><rect x="4" y="2" width="12" height="16" rx="2" fill="#4a90d9"/><rect x="6" y="6" width="8" height="1" rx=".5" fill="#fff" opacity=".5"/><rect x="6" y="9" width="6" height="1" rx=".5" fill="#fff" opacity=".5"/><rect x="6" y="12" width="7" height="1" rx=".5" fill="#fff" opacity=".5"/></svg>
+    </button>
+    <button class="taskbar-btn" data-app="calculator" onclick="toggleApp('calculator')" title="Calcolatrice">
+      <svg viewBox="0 0 20 20"><rect x="3" y="2" width="14" height="16" rx="2.5" fill="#1e1e1e" stroke="#555" stroke-width=".5"/><rect x="5" y="4" width="10" height="4" rx="1" fill="#333"/><rect x="5" y="10" width="2" height="1.8" rx=".4" fill="#555"/><rect x="9" y="10" width="2" height="1.8" rx=".4" fill="#555"/><rect x="13" y="10" width="2" height="1.8" rx=".4" fill="#555"/><rect x="5" y="13" width="2" height="1.8" rx=".4" fill="#555"/><rect x="9" y="13" width="2" height="1.8" rx=".4" fill="#555"/><rect x="13" y="13" width="2" height="1.8" rx=".4" fill="#0078d4"/></svg>
+    </button>
+    <button class="taskbar-btn" data-app="settings" onclick="toggleApp('settings')" title="Impostazioni">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="4"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3M3.9 3.9l2.1 2.1M14 14l2.1 2.1M16.1 3.9l-2.1 2.1M8.1 14l-2.1 2.1" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <div class="taskbar-right">
+    <div class="system-tray">
+      <div class="tray-icon" title="Rete"><svg viewBox="0 0 16 16"><path d="M1 12h2v3H1zM5 9h2v6H5zM9 6h2v9H9zM13 3h2v12h-2z" fill="currentColor"/></svg></div>
+      <div class="tray-icon" title="Audio"><svg viewBox="0 0 16 16"><path d="M2 6v4h2.5l3.5 3V3L4.5 6H2z" fill="currentColor"/><path d="M10 5.5c1 .8 1.5 2 1.5 3.5s-.5 2.7-1.5 3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M12 3c1.5 1.2 2.5 3 2.5 5s-1 3.8-2.5 5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></div>
+      <div class="tray-icon" title="Batteria"><svg viewBox="0 0 16 16"><rect x="1" y="4" width="12" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="3" y="6" width="7" height="4" rx=".5" fill="currentColor" opacity=".7"/><rect x="13" y="6.5" width="2" height="3" rx=".5" fill="currentColor"/></svg></div>
+    </div>
+    <div class="clock-area" onclick="toggleStartMenu()">
+      <span class="clock-time" id="clock-time">00:00</span>
+      <span class="clock-date" id="clock-date">01/01/2025</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// === STATE ===
+const S = {
+  wins: {
+    explorer:   { open:false, min:false, max:false, x:100, y:40,  w:820, h:500 },
+    notepad:    { open:false, min:false, max:false, x:220, y:80,  w:640, h:420 },
+    calculator: { open:false, min:false, max:false, x:620, y:60,  w:320, h:500 },
+    settings:   { open:false, min:false, max:false, x:160, y:50,  w:720, h:520 },
+  },
+  active: null,
+  z: 100,
+  dragging: null
+};
+
+// === WINDOW MANAGEMENT ===
+function openApp(id) {
+  const w = S.wins[id], el = document.getElementById('win-'+id);
+  if(!w||!el) return;
+  if(w.open && !w.min) { focusWin(id); return; }
+  w.open = true; w.min = false;
+  el.classList.add('open');
+  el.classList.remove('minimized');
+  if(!w.max) {
+    el.style.left = w.x+'px';
+    el.style.top = w.y+'px';
+    el.style.width = w.w+'px';
+    el.style.height = w.h+'px';
+  }
+  focusWin(id);
+  updateTaskbar();
+  closeStartMenu();
+}
+
+function closeWindow(id) {
+  const w = S.wins[id], el = document.getElementById('win-'+id);
+  w.open = false; w.min = false; w.max = false;
+  el.classList.remove('open','minimized','maximized');
+  if(S.active === id) S.active = null;
+  updateTaskbar();
+}
+
+function minimizeWindow(id) {
+  const w = S.wins[id], el = document.getElementById('win-'+id);
+  w.min = true;
+  el.classList.add('minimized');
+  if(S.active === id) S.active = null;
+  updateTaskbar();
+}
+
+function maximizeWindow(id) {
+  const w = S.wins[id], el = document.getElementById('win-'+id);
+  if(w.max) {
+    w.max = false;
+    el.classList.remove('maximized');
+    el.style.left = w.x+'px';
+    el.style.top = w.y+'px';
+    el.style.width = w.w+'px';
+    el.style.height = w.h+'px';
+  } else {
+    w.max = true;
+    el.classList.add('maximized');
+  }
+}
+
+function focusWin(id) {
+  S.active = id;
+  S.z++;
+  document.getElementById('win-'+id).style.zIndex = S.z;
+  updateTaskbar();
+}
+
+function toggleApp(id) {
+  const w = S.wins[id];
+  if(!w.open) openApp(id);
+  else if(w.min) openApp(id);
+  else if(S.active === id) minimizeWindow(id);
+  else focusWin(id);
+}
+
+// === DRAGGING ===
+function startDrag(id, e) {
+  if(S.wins[id].max) return;
+  if(e.button !== 0) return;
+  const el = document.getElementById('win-'+id);
+  S.dragging = { id, ox: e.clientX - el.offsetLeft, oy: e.clientY - el.offsetTop };
+  focusWin(id);
+  e.preventDefault();
+}
+
+document.addEventListener('mousemove', e => {
+  if(!S.dragging) return;
+  const { id, ox, oy } = S.dragging;
+  const el = document.getElementById('win-'+id);
+  let nx = e.clientX - ox, ny = e.clientY - oy;
+  ny = Math.max(0, ny);
+  el.style.left = nx+'px';
+  el.style.top = ny+'px';
+});
+
+document.addEventListener('mouseup', () => {
+  if(!S.dragging) return;
+  const { id } = S.dragging;
+  const el = document.getElementById('win-'+id);
+  S.wins[id].x = el.offsetLeft;
+  S.wins[id].y = el.offsetTop;
+  S.dragging = null;
+});
+
+// Double-click header to maximize
+document.querySelectorAll('.win-header').forEach(hdr => {
+  hdr.addEventListener('dblclick', () => {
+    const win = hdr.closest('.window');
+    if(win) {
+      const id = win.id.replace('win-','');
+      maximizeWindow(id);
+    }
+  });
+});
+
+// === TASKBAR ===
+function updateTaskbar() {
+  ['explorer','notepad','calculator','settings','edge'].forEach(id => {
+    const btn = document.querySelector(`.taskbar-btn[data-app="${id}"]`);
+    if(!btn) return;
+    const w = S.wins[id];
+    if(!w) return;
+    btn.classList.toggle('active', S.active === id && w.open && !w.min);
+    btn.classList.toggle('running', w.open && !w.min && S.active !== id);
+  });
+}
+
+// === START MENU ===
+function toggleStartMenu() {
+  const sm = document.getElementById('start-menu');
+  const isOpen = sm.classList.contains('open');
+  closeCtxMenu();
+  sm.classList.toggle('open', !isOpen);
+  if(!isOpen) sm.querySelector('input').focus();
+}
+function closeStartMenu() {
+  document.getElementById('start-menu').classList.remove('open');
+}
+
+// === CONTEXT MENU ===
+function showCtxMenu(e) {
+  e.preventDefault();
+  closeStartMenu();
+  const menu = document.getElementById('context-menu');
+  let x = e.clientX, y = e.clientY;
+  menu.classList.add('open');
+  const rect = menu.getBoundingClientRect();
+  if(x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 8;
+  if(y + rect.height > window.innerHeight - 48) y = window.innerHeight - 48 - rect.height - 8;
+  menu.style.left = x+'px';
+  menu.style.top = y+'px';
+}
+function closeCtxMenu() {
+  document.getElementById('context-menu').classList.remove('open');
+}
+
+document.getElementById('desktop').addEventListener('contextmenu', e => {
+  if(e.target.closest('.window') || e.target.closest('#taskbar') || e.target.closest('#start-menu')) return;
+  showCtxMenu(e);
+});
+
+// Close menus on click outside
+document.addEventListener('mousedown', e => {
+  if(!e.target.closest('#start-menu') && !e.target.closest('.start-btn') && !e.target.closest('.clock-area'))
+    closeStartMenu();
+  if(!e.target.closest('#context-menu'))
+    closeCtxMenu();
+});
+
+// Desktop click to focus
+document.getElementById('desktop').addEventListener('mousedown', e => {
+  if(e.target === document.getElementById('desktop') || e.target.closest('.bloom') || e.target.closest('.desktop-icons')) {
+    if(S.active) {
+      S.active = null;
+      updateTaskbar();
+    }
+  }
+});
+
+// Window click to focus
+document.querySelectorAll('.window').forEach(w => {
+  w.addEventListener('mousedown', () => {
+    const id = w.id.replace('win-','');
+    focusWin(id);
+  });
+});
+
+// File selection in explorer
+function selectFile(el) {
+  document.querySelectorAll('.file-item').forEach(f => f.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+// === CLOCK ===
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock-time').textContent = now.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('clock-date').textContent = now.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// === CALCULATOR ===
+let C = { d:'0', expr:'', prev:null, op:null, fresh:true };
+
+function calcInput(v) {
+  if(C.fresh) { C.d = v === '.' ? '0.' : v; C.fresh = false; }
+  else {
+    if(v === '.' && C.d.includes('.')) return;
+    C.d = C.d === '0' && v !== '.' ? v : C.d + v;
+  }
+  calcUpdate();
+}
+
+function calcOp(op) {
+  if(C.prev !== null && !C.fresh) calcEquals();
+  C.prev = parseFloat(C.d);
+  C.op = op;
+  C.expr = fmtNum(C.prev) + ' ' + op;
+  C.fresh = true;
+  calcUpdate();
+}
+
+function calcEquals() {
+  if(C.prev === null || C.op === null) return;
+  const cur = parseFloat(C.d);
+  let r;
+  switch(C.op) {
+    case '+': r = C.prev + cur; break;
+    case '-': r = C.prev - cur; break;
+    case '×': r = C.prev * cur; break;
+    case '÷': r = cur === 0 ? 'Errore' : C.prev / cur; break;
+  }
+  C.expr = fmtNum(C.prev) + ' ' + C.op + ' ' + fmtNum(cur) + ' =';
+  C.d = typeof r === 'number' ? String(r) : r;
+  C.prev = null; C.op = null; C.fresh = true;
+  calcUpdate();
+}
+
+function calcClear() { C = {d:'0',expr:'',prev:null,op:null,fresh:true}; calcUpdate(); }
+function calcClearEntry() { C.d = '0'; C.fresh = true; calcUpdate(); }
+function calcBackspace() { C.d = C.d.length > 1 ? C.d.slice(0,-1) : '0'; calcUpdate(); }
+function calcPercent() { C.d = String(parseFloat(C.d)/100); C.fresh = true; calcUpdate(); }
+function calcNegate() { if(C.d!=='0') C.d = C.d.startsWith('-') ? C.d.slice(1) : '-'+C.d; calcUpdate(); }
+function calcSqrt() { const v=parseFloat(C.d); C.d = v<0?'Errore':String(Math.sqrt(v)); C.fresh=true; calcUpdate(); }
+function calcSquare() { C.d = String(Math.pow(parseFloat(C.d),2)); C.fresh=true; calcUpdate(); }
+function calcReciprocal() { const v=parseFloat(C.d); C.d = v===0?'Errore':String(1/v); C.fresh=true; calcUpdate(); }
+
+function fmtNum(n) {
+  if(typeof n !== 'number') return n;
+  return Number.isInteger(n) ? String(n) : parseFloat(n.toPrecision(12)).toString();
+}
+
+function calcUpdate() {
+  document.getElementById('calc-result').textContent = C.d;
+  document.getElementById('calc-expr').textContent = C.expr;
+  // Auto-size font for long numbers
+  const el = document.getElementById('calc-result');
+  el.style.fontSize = C.d.length > 12 ? '22px' : C.d.length > 9 ? '28px' : '38px';
+}
+
+// Keyboard support for calculator
+document.addEventListener('keydown', e => {
+  if(!S.wins.calculator.open || S.wins.calculator.min) return;
+  if(S.active !== 'calculator') return;
+  if(e.key >= '0' && e.key <= '9') calcInput(e.key);
+  else if(e.key === '.') calcInput('.');
+  else if(e.key === '+') calcOp('+');
+  else if(e.key === '-') calcOp('-');
+  else if(e.key === '*') calcOp('×');
+  else if(e.key === '/') { e.preventDefault(); calcOp('÷'); }
+  else if(e.key === 'Enter' || e.key === '=') calcEquals();
+  else if(e.key === 'Escape') calcClear();
+  else if(e.key === 'Backspace') calcBackspace();
+  else if(e.key === '%') calcPercent();
+});
+</script>
+</body>
+</html>

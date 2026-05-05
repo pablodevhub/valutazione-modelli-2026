@@ -1,0 +1,8 @@
+# Protezione file sensibili e nascosti
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<Files ".env">
+    Require all denied
+</Files>
