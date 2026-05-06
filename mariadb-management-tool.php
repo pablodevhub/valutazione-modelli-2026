@@ -1,1080 +1,999 @@
 <?php
-/**
- * MiniDBA v1.0 — Complete MariaDB Management Tool
- * Single-file PHP application for MariaDB administration.
- *
- * Features: DB/Table/View/Procedure/Function CRUD, Backup/Restore
- * with BLOB & date support, automated backup via secure GET API.
- */
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// CONFIGURATION
-// ═══════════════════════════════════════════════════════════════════════════════
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
-ini_set('max_execution_time', 600);
-ini_set('memory_limit', '512M');
 session_start();
-
-define('ROWS_PER_PAGE', 50);
-define('INSERT_BATCH', 100);
-
-// ── Automated Backup API ─────────────────────────────────────────────────────
-// Set BACKUP_API_KEY to a strong random string to enable GET-based backups.
-// Usage examples:
-//   ?auto_backup=1&key=YOUR_KEY&db=mydb
-//   ?auto_backup=1&key=YOUR_KEY&db=mydb&compress=1
-//   ?auto_backup=1&key=YOUR_KEY&db=mydb&save=1
-//   ?auto_backup=1&key=YOUR_KEY&db=mydb&save=1&compress=1
-define('BACKUP_API_KEY',      '');        // leave empty to disable
-define('BACKUP_DB_HOST',      '127.0.0.1');
-define('BACKUP_DB_PORT',      3306);
-define('BACKUP_DB_USER',      '');        // MariaDB user for automated backups
-define('BACKUP_DB_PASS',      '');        // password
-define('BACKUP_ALLOWED_IPS',  []);        // empty = all; e.g. ['10.0.0.5']
-define('BACKUP_SAVE_DIR',     '');        // server dir; empty = force download
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AUTO-BACKUP API HANDLER  (runs before any HTML)
-// ═══════════════════════════════════════════════════════════════════════════════
-if (isset($_GET['auto_backup']) && $_GET['auto_backup'] === '1') {
-    header('Content-Type: application/json; charset=utf-8');
-    if (BACKUP_API_KEY === '' || BACKUP_DB_USER === '') {
-        http_response_code(403);
-        echo json_encode(['error' => 'Automated backup not configured']); exit;
-    }
-    $key = $_GET['key'] ?? '';
-    if (!hash_equals(BACKUP_API_KEY, $key)) {
-        http_response_code(403);
-        echo json_encode(['error' => 'Invalid API key']); exit;
-    }
-    if (!empty(BACKUP_ALLOWED_IPS)) {
-        $ip = $_SERVER['REMOTE_ADDR'];
-        $ok = false;
-        foreach (BACKUP_ALLOWED_IPS as $a) {
-            if (strpos($a, '/') !== false) {
-                list($sub,$mask) = explode('/', $a);
-                if ((ip2long($ip) & ~((1<<(32-$mask))-1)) === ip2long($sub)) { $ok = true; break; }
-            } elseif ($ip === $a) { $ok = true; break; }
-        }
-        if (!$ok) { http_response_code(403); echo json_encode(['error'=>'IP not allowed']); exit; }
-    }
-    $dbName = $_GET['db'] ?? '';
-    if (!$dbName) { http_response_code(400); echo json_encode(['error'=>'Missing db param']); exit; }
-    try {
-        $p = dbConnect(BACKUP_DB_HOST, BACKUP_DB_PORT, BACKUP_DB_USER, BACKUP_DB_PASS, $dbName);
-        $sql = generateBackup($p, $dbName);
-        $fn  = preg_replace('/[^a-zA-Z0-9_]/','_', $dbName) . '_' . date('Y-m_d_His') . '.sql';
-        if (!empty($_GET['compress'])) { $sql = gzencode($sql, 6); $fn .= '.gz'; }
-        if (!empty($_GET['save']) && BACKUP_SAVE_DIR !== '') {
-            $path = rtrim(BACKUP_SAVE_DIR, '/') . '/' . $fn;
-            file_put_contents($path, $sql);
-            echo json_encode(['ok'=>true,'file'=>$path,'size'=>strlen($sql)]);
-        } else {
-            header('Content-Type: application/octet-stream');
-            header('Content-Disposition: attachment; filename="'.$fn.'"');
-            header('Content-Length: '.strlen($sql));
-            echo $sql;
-        }
-    } catch (Exception $ex) {
-        http_response_code(500); echo json_encode(['error'=>$ex->getMessage()]);
-    }
-    exit;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// HELPER FUNCTIONS
-// ═══════════════════════════════════════════════════════════════════════════════
-function dbConnect($h,$p,$u,$pw,$db=null){
-    $dsn="mysql:host=$h;port=$p;charset=utf8mb4".($db?";dbname=$db":"");
-    return new PDO($dsn,$u,$pw,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,PDO::ATTR_EMULATE_PREPARES=>false]);
-}
-function qi($i){ return '`'.str_replace('`','``',$i).'`'; }           // quote identifier
-function eh($s){ return htmlspecialchars($s??'',ENT_QUOTES,'UTF-8'); } // escape html
-function csrf(){ if(empty($_SESSION['csrf']))$_SESSION['csrf']=bin2hex(random_bytes(32)); return $_SESSION['csrf']; }
-function chk(){ return hash_equals($_SESSION['csrf']??'', $_POST['_csrf']??''); }
-function fmtBytes($b){$u=['B','KB','MB','GB','TB'];$i=0;while($b>=1024&&$i<4){$b/=1024;$i++;}return round($b,2).' '.$u[$i];}
-function redir($u){header("Location:$u");exit;}
-function escSQL($v){$s=["\\","\0","\n","\r","'",'"',"\x1a"];$r=["\\\\","\\0","\\n","\\r","\\'",'\\"',"\\Z"];return str_replace($s,$r,$v);}
-
-function colCategory($t){
-    $t=strtolower($t);
-    if(preg_match('/(blob|binary|varbinary)/',$t))return'bin';
-    if(preg_match('/^bit/',$t))return'bit';
-    if($t==='date')return'date';
-    if(preg_match('/^(datetime|timestamp)$/',$t))return'dt';
-    if($t==='time')return'time';
-    if($t==='year')return'year';
-    if(preg_match('/^(int|integer|smallint|mediumint|bigint|tinyint|float|double|decimal|numeric|real)/',$t))return'num';
-    return'str';
-}
-
-function sqlVal($v,$type){
-    if($v===null)return'NULL';
-    $c=colCategory($type);
-    switch($c){
-        case'bin':  return'0x'.bin2hex($v);
-        case'bit':  return"b'".decbin(ord($v))."'";
-        case'date': return"'".date('Y-m-d',strtotime($v))."'";
-        case'dt':   return"'".date('Y-m-d H:i:s',strtotime($v))."'";
-        case'time': return"'".$v."'";
-        case'year': return intval($v);
-        case'num':  return is_numeric($v)?$v:"'".escSQL($v)."'";
-        default:    return"'".escSQL($v)."'";
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// BACKUP ENGINE
-// ═══════════════════════════════════════════════════════════════════════════════
-function generateBackup($pdo, $dbName, $opts=[]){
-    $incData  = $opts['data']  ?? true;
-    $incViews = $opts['views'] ?? true;
-    $incProcs = $opts['procs'] ?? true;
-    $incFuncs = $opts['funcs'] ?? true;
-    $selTbl   = $opts['tables']?? null;
-    $o=[];
-    $o[]="-- MiniDBA Backup";
-    $o[]="-- Database: $dbName";
-    $o[]="-- Date: ".date('Y-m-d H:i:s');
-    $o[]="";
-    $o[]="SET NAMES utf8mb4;";
-    $o[]="SET CHARACTER SET utf8mb4;";
-    $o[]="SET FOREIGN_KEY_CHECKS=0;";
-    $o[]="SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';";
-    $o[]="SET AUTOCOMMIT=0;";
-    $o[]="START TRANSACTION;";
-    $o[]="";
-    // tables
-    $allT=$pdo->query("SHOW FULL TABLES WHERE Table_type='BASE TABLE'")->fetchAll(PDO::FETCH_COLUMN);
-    $allV=$pdo->query("SHOW FULL TABLES WHERE Table_type='VIEW'")->fetchAll(PDO::FETCH_COLUMN);
-    $tables=$selTbl?array_intersect($allT,$selTbl):$allT;
-    foreach($tables as $t){
-        $cr=$pdo->query("SHOW CREATE TABLE ".qi($t))->fetch(PDO::FETCH_NUM);
-        $o[]="-- Table: $t";
-        $o[]="DROP TABLE IF EXISTS ".qi($t).";";
-        $o[]=$cr[1].";";
-        $o[]="";
-        if($incData){
-            $cols=$pdo->query("SHOW COLUMNS FROM ".qi($t))->fetchAll();
-            $cNames=array_map(function($c){return qi($c['Field']);},$cols);
-            $cTypes=[];foreach($cols as $c)$cTypes[$c['Field']]=$c['Type'];
-            $cnt=$pdo->query("SELECT COUNT(*) FROM ".qi($t))->fetchColumn();
-            if($cnt>0){
-                $cl=implode(', ',$cNames);
-                $batch=[];$tr=0;
-                $stmt=$pdo->query("SELECT * FROM ".qi($t));
-                while($row=$stmt->fetch(PDO::FETCH_NUM)){
-                    $vals=[];foreach($row as $i=>$v)$vals[]=sqlVal($v,$cTypes[$cols[$i]['Field']]);
-                    $batch[]='('.implode(', ',$vals).')'; $tr++;
-                    if(count($batch)>=INSERT_BATCH){ $o[]="INSERT INTO ".qi($t)." ($cl) VALUES"; $o[]=implode(",\n",$batch).";"; $o[]=""; $batch=[]; }
-                }
-                if($batch){ $o[]="INSERT INTO ".qi($t)." ($cl) VALUES"; $o[]=implode(",\n",$batch).";"; }
-                $o[]="-- Rows: $tr"; $o[]="";
-            }
-        }
-    }
-    // views
-    if($incViews && $allV){
-        $o[]="-- ═══ VIEWS ═══"; $o[]="";
-        foreach($allV as $v){
-            $cr=$pdo->query("SHOW CREATE VIEW ".qi($v))->fetch(PDO::FETCH_NUM);
-            $o[]="DROP VIEW IF EXISTS ".qi($v).";"; $o[]=$cr[1].";"; $o[]="";
-        }
-    }
-    // procedures
-    if($incProcs){
-        $rs=$pdo->query("SELECT ROUTINE_NAME FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=".$pdo->quote($dbName)." AND ROUTINE_TYPE='PROCEDURE'")->fetchAll(PDO::FETCH_COLUMN);
-        if($rs){ $o[]="-- ═══ PROCEDURES ═══"; $o[]="";
-            foreach($rs as $r){ $cr=$pdo->query("SHOW CREATE PROCEDURE ".qi($r))->fetch(PDO::FETCH_NUM);
-                $o[]="DROP PROCEDURE IF EXISTS ".qi($r).";"; $o[]="DELIMITER //"; $o[]=$cr[2]." //"; $o[]="DELIMITER ;"; $o[]=""; }
-        }
-    }
-    // functions
-    if($incFuncs){
-        $rs=$pdo->query("SELECT ROUTINE_NAME FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=".$pdo->quote($dbName)." AND ROUTINE_TYPE='FUNCTION'")->fetchAll(PDO::FETCH_COLUMN);
-        if($rs){ $o[]="-- ═══ FUNCTIONS ═══"; $o[]="";
-            foreach($rs as $r){ $cr=$pdo->query("SHOW CREATE FUNCTION ".qi($r))->fetch(PDO::FETCH_NUM);
-                $o[]="DROP FUNCTION IF EXISTS ".qi($r).";"; $o[]="DELIMITER //"; $o[]=$cr[2]." //"; $o[]="DELIMITER ;"; $o[]=""; }
-        }
-    }
-    $o[]="COMMIT;";
-    $o[]="SET FOREIGN_KEY_CHECKS=1;";
-    $o[]="SET AUTOCOMMIT=1;";
-    $o[]="-- Backup complete";
-    return implode("\n",$o);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// RESTORE ENGINE  (SQL splitter handles DELIMITER, strings, comments)
-// ═══════════════════════════════════════════════════════════════════════════════
-function splitSQL($sql){
-    $stmts=[];$cur='';$delim=';';$inStr=false;$sChar='';$esc=false;$inMC=false;
-    $len=strlen($sql);$i=0;
-    while($i<$len){
-        $ch=$sql[$i];$nx=$i+1<$len?$sql[$i+1]:'';
-        if(!$inStr&&!$inMC){
-            if(stripos(ltrim(substr($sql,$i)),'DELIMITER ')===0){
-                $end=strpos($sql,"\n",$i); if($end===false)$end=$len;
-                $nd=trim(substr($sql,$i+10,$end-$i-10)); if($nd!=='')$delim=$nd;
-                $i=$end+1; continue;
-            }
-        }
-        if(!$inStr){
-            if(!$inMC&&$ch==='-'&&$nx==='-'){$end=strpos($sql,"\n",$i);if($end===false)$end=$len;$cur.=substr($sql,$i,$end-$i);$i=$end;continue;}
-            if(!$inMC&&$ch==='/'&&$nx==='*'){$inMC=true;$cur.='/*';$i+=2;continue;}
-            if($inMC){$cur.=$ch;if($ch==='*'&&$nx==='/'){$cur.='/';$inMC=false;$i+=2;continue;}$i++;continue;}
-        }
-        if(!$inMC){
-            if($esc){$cur.=$ch;$esc=false;$i++;continue;}
-            if($ch==='\\'){$cur.=$ch;$esc=true;$i++;continue;}
-            if($inStr){$cur.=$ch;if($ch===$sChar)$inStr=false;$i++;continue;}
-            if($ch==="'"||$ch==='"'){$inStr=true;$sChar=$ch;$cur.=$ch;$i++;continue;}
-        }
-        if(!$inStr&&!$inMC){ $dl=strlen($delim); if(substr($sql,$i,$dl)===$delim){ $cur=trim($cur); if($cur!=='')$stmts[]=$cur; $cur=''; $i+=$dl; continue; } }
-        $cur.=$ch;$i++;
-    }
-    $cur=trim($cur); if($cur!=='')$stmts[]=$cur;
-    return $stmts;
-}
-function restoreSQL($pdo,$sql){
-    $stmts=splitSQL($sql);$ok=0;$errs=[];
-    foreach($stmts as $i=>$s){ $s=trim($s); if($s==='')continue;
-        try{$pdo->exec($s);$ok++;}catch(PDOException $e){$errs[]="#".($i+1).": ".$e->getMessage();}
-    }
-    return['executed'=>$ok,'errors'=>$errs];
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AUTHENTICATION
-// ═══════════════════════════════════════════════════════════════════════════════
-$me=$_SESSION['db_user']??null; $mh=$_SESSION['db_host']??null;
-$mp=$_SESSION['db_port']??null; $mw=$_SESSION['db_pass']??null;
-$curDb=$_GET['db']??$_SESSION['db_name']??null; $_SESSION['db_name']=$curDb;
-$pdo=null; $loginErr='';
-
-if(isset($_POST['act'])&&$_POST['act']==='login'){
-    $h=$_POST['host']??'127.0.0.1'; $p=intval($_POST['port']??3306);
-    $u=$_POST['user']??''; $pw=$_POST['pass']??'';
-    try{$pdo=dbConnect($h,$p,$u,$pw);
-        $_SESSION['db_host']=$h;$_SESSION['db_port']=$p;$_SESSION['db_user']=$u;$_SESSION['db_pass']=$pw;$_SESSION['db_login']=time();
-        $me=$u;$mh=$h;$mp=$p;$mw=$pw;
-    }catch(PDOException $e){$loginErr='Login failed: '.$e->getMessage();}
-}
-if(isset($_GET['act'])&&$_GET['act']==='logout'){session_destroy();redir('?');}
-
-if(!$me){showLogin($loginErr);exit;}
-
-if(!$pdo){try{$pdo=dbConnect($mh,$mp,$me,$mw,$curDb);}catch(PDOException $e){session_destroy();showLogin('Session expired.');exit;}}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// ACTION PROCESSING (POST)
-// ═══════════════════════════════════════════════════════════════════════════════
-$msg=''; $err=''; $act=$_GET['act']??$_POST['act']??'databases'; $tbl=$_GET['table']??null;
-
-if($_SERVER['REQUEST_METHOD']==='POST'&&chk()){
-    switch($_POST['act']){
-        case'create_db':
-            $n=trim($_POST['name']??''); $ch=$_POST['charset']??'utf8mb4'; $co=$_POST['collation']??'';
-            if($n){try{$pdo->exec("CREATE DATABASE ".qi($n)." CHARACTER SET ".qi($ch).($co?" COLLATE ".qi($co):""));
-                $msg="Database '$n' created.";}catch(PDOException $e){$err=$e->getMessage();}}
-            break;
-        case'drop_db':
-            $n=$_POST['name']??''; if($n){try{$pdo->exec("DROP DATABASE ".qi($n));$msg="Database '$n' dropped.";
-                if($curDb===$n){$curDb=null;$_SESSION['db_name']=null;}}catch(PDOException $e){$err=$e->getMessage();}}
-            break;
-        case'create_table':
-            $tn=trim($_POST['tname']??''); $eng=$_POST['engine']??'InnoDB'; $ch=$_POST['charset']??'utf8mb4';
-            $cols=$_POST['cols']??[];
-            if($tn&&$cols){
-                $defs=[];$pks=[];
-                foreach($cols as $c){
-                    $f=trim($c['field']??''); if(!$f)continue;
-                    $def=qi($f).' '.($c['type']??'VARCHAR(255)');
-                    if(!empty($c['nn']))$def.=' NOT NULL';
-                    if($c['default']!==''&&$c['default']!==null)$def.=' DEFAULT '.($c['default']==='NULL'?'NULL':"'".escSQL($c['default'])."'");
-                    if(!empty($c['ai']))$def.=' AUTO_INCREMENT';
-                    if(!empty($c['comment']))$def.=" COMMENT '".escSQL($c['comment'])."'";
-                    $defs[]=$def;
-                    if(!empty($c['pk']))$pks[]=qi($f);
-                }
-                if($pks)$defs[]='PRIMARY KEY ('.implode(',',$pks).')';
-                $sql="CREATE TABLE ".qi($tn)." (\n  ".implode(",\n  ",$defs)."\n) ENGINE=$eng DEFAULT CHARSET=$ch";
-                try{$pdo->exec($sql);$msg="Table '$tn' created.";$act='structure';$tbl=$tn;}catch(PDOException $e){$err=$e->getMessage();}
-            }
-            break;
-        case'drop_table':
-            $tn=$_POST['table']??''; if($tn){try{$pdo->exec("DROP TABLE ".qi($tn));$msg="Table '$tn' dropped.";$tbl=null;$act='tables';
-            }catch(PDOException $e){$err=$e->getMessage();}} break;
-        case'truncate':
-            $tn=$_POST['table']??''; if($tn){try{$pdo->exec("TRUNCATE TABLE ".qi($tn));$msg="Table '$tn' truncated.";
-            }catch(PDOException $e){$err=$e->getMessage();}} break;
-        case'insert_row':
-            $tn=$_POST['table']??''; $vals=$_POST['vals']??[];
-            if($tn&&$vals){
-                $fs=[];$vs=[];$ps=[];
-                foreach($vals as $col=>$info){
-                    $fs[]=qi($col);
-                    if(($info['null']??false)&&($info['val']??'')===''){$vs[]='NULL';}
-                    else{$vs[]='?';$ps[]=$info['val'];}
-                }
-                $sql="INSERT INTO ".qi($tn)." (".implode(',',$fs).") VALUES (".implode(',',$vs).")";
-                try{$st=$pdo->prepare($sql);$st->execute($ps);$msg="Row inserted (ID: ".$pdo->lastInsertId().").";
-                }catch(PDOException $e){$err=$e->getMessage();}
-            }
-            break;
-        case'update_row':
-            $tn=$_POST['table']??''; $vals=$_POST['vals']??[]; $where=$_POST['where']??'';
-            if($tn&&$where){
-                $sets=[];$ps=[];
-                foreach($vals as $col=>$info){
-                    if(($info['null']??false)&&($info['val']??'')===''){$sets[]=qi($col)."=NULL";}
-                    else{$sets[]=qi($col)."=?";$ps[]=$info['val'];}
-                }
-                $sql="UPDATE ".qi($tn)." SET ".implode(',',$sets)." WHERE $where LIMIT 1";
-                try{$st=$pdo->prepare($sql);$st->execute($ps);$msg="Row updated.";}catch(PDOException $e){$err=$e->getMessage();}
-            }
-            break;
-        case'delete_row':
-            $tn=$_POST['table']??''; $where=$_POST['where']??'';
-            if($tn&&$where){try{$pdo->exec("DELETE FROM ".qi($tn)." WHERE $where LIMIT 1");$msg="Row deleted.";
-            }catch(PDOException $e){$err=$e->getMessage();}} break;
-        case'add_column':
-            $tn=$_POST['table']??''; $f=trim($_POST['field']??''); $tp=$_POST['type']??'VARCHAR(255)';
-            $nn=!empty($_POST['nn']); $df=$_POST['default']??''; $ai=!empty($_POST['ai']);
-            if($tn&&$f){
-                $sql="ALTER TABLE ".qi($tn)." ADD COLUMN ".qi($f)." $tp".($nn?" NOT NULL":"").($df!==''?" DEFAULT ".($df==='NULL'?"NULL":"'".escSQL($df)."'"):"").($ai?" AUTO_INCREMENT":"");
-                try{$pdo->exec($sql);$msg="Column '$f' added.";}catch(PDOException $e){$err=$e->getMessage();}
-            }
-            break;
-        case'drop_column':
-            $tn=$_POST['table']??''; $col=$_POST['column']??'';
-            if($tn&&$col){try{$pdo->exec("ALTER TABLE ".qi($tn)." DROP COLUMN ".qi($col));$msg="Column '$col' dropped.";
-            }catch(PDOException $e){$err=$e->getMessage();}} break;
-        case'add_index':
-            $tn=$_POST['table']??''; $iname=trim($_POST['iname']??''); $cols=$_POST['icols']??[]; $unique=!empty($_POST['unique']);
-            if($tn&&$iname&&$cols){
-                try{$pdo->exec("ALTER TABLE ".qi($tn)." ADD ".($unique?"UNIQUE ":"")."INDEX ".qi($iname)." (".implode(',',array_map('qi',$cols)).")");
-                $msg="Index '$iname' added.";}catch(PDOException $e){$err=$e->getMessage();}
-            }
-            break;
-        case'drop_index':
-            $tn=$_POST['table']??''; $iname=$_POST['index']??'';
-            if($tn&&$iname){try{$pdo->exec("ALTER TABLE ".qi($tn)." DROP INDEX ".qi($iname));$msg="Index '$iname' dropped.";
-            }catch(PDOException $e){$err=$e->getMessage();}} break;
-        case'create_view':
-            $vn=trim($_POST['name']??''); $def=trim($_POST['definition']??'');
-            if($vn&&$def){try{$pdo->exec("CREATE OR REPLACE VIEW ".qi($vn)." AS $def");$msg="View '$vn' created.";
-            }catch(PDOException $e){$err=$e->getMessage();}} break;
-        case'drop_view':
-            $vn=$_POST['name']??''; if($vn){try{$pdo->exec("DROP VIEW ".qi($vn));$msg="View '$vn' dropped.";
-            }catch(PDOException $e){$err=$e->getMessage();}} break;
-        case'create_proc':
-            $pn=trim($_POST['name']??''); $body=trim($_POST['body']??'');
-            if($pn&&$body){try{$pdo->exec("DROP PROCEDURE IF EXISTS ".qi($pn));$pdo->exec($body);$msg="Procedure '$pn' created.";
-            }catch(PDOException $e){$err=$e->getMessage();}} break;
-        case'drop_proc':
-            $pn=$_POST['name']??''; if($pn){try{$pdo->exec("DROP PROCEDURE IF EXISTS ".qi($pn));$msg="Procedure '$pn' dropped.";
-            }catch(PDOException $e){$err=$e->getMessage();}} break;
-        case'create_func':
-            $fn=trim($_POST['name']??''); $body=trim($_POST['body']??'');
-            if($fn&&$body){try{$pdo->exec("DROP FUNCTION IF EXISTS ".qi($fn));$pdo->exec($body);$msg="Function '$fn' created.";
-            }catch(PDOException $e){$err=$e->getMessage();}} break;
-        case'drop_func':
-            $fn=$_POST['name']??''; if($fn){try{$pdo->exec("DROP FUNCTION IF EXISTS ".qi($fn));$msg="Function '$fn' dropped.";
-            }catch(PDOException $e){$err=$e->getMessage();}} break;
-        case'run_sql':
-            $sql=trim($_POST['sqltext']??'');
-            if($sql){
-                $t0=microtime(true);
-                try{
-                    if(preg_match('/^\s*(select|show|describe|explain|desc)\s/i',$sql)){
-                        $st=$pdo->query($sql); $sqlResult=$st->fetchAll(); $sqlTime=round((microtime(true)-$t0)*1000,2);
-                        $sqlCols=$st->columnCount()?array_map(function($i)use($st){return $st->getColumnMeta($i)['name'];},range(0,$st->columnCount()-1)):[];$sqlRows=count($sqlResult);$sqlMsg="$sqlRows row(s) in {$sqlTime}ms";
-                    }else{$affected=$pdo->exec($sql);$sqlTime=round((microtime(true)-$t0)*1000,2);$sqlResult=null;$sqlMsg="$affected row(s) affected in {$sqlTime}ms";}
-                }catch(PDOException $e){$sqlErr=$e->getMessage();}
-            }
-            break;
-        case'restore':
-            $sql='';
-            if(!empty($_FILES['file']['tmp_name'])){$sql=file_get_contents($_FILES['file']['tmp_name']);}
-            elseif(!empty($_POST['sqltext'])){$sql=$_POST['sqltext'];}
-            if($sql){
-                $compressed=false;
-                if(substr($sql,0,2)==="\x1f\x8b"){$sql=gzdecode($sql);$compressed=true;}
-                $res=restoreSQL($pdo,$sql);
-                $msg="Restore: {$res['executed']} statement(s) executed".($res['errors']?"; ".count($res['errors'])." error(s)":"").($compressed?" (decompressed)":"");
-                if($res['errors'])$err=implode('<br>',array_slice($res['errors'],0,10));
-            }
-            break;
-        case'do_backup':
-            $dbName=$_POST['db']??$curDb;
-            if($dbName){
-                $bOpts=['data'=>$_POST['inc_data']??1,'views'=>$_POST['inc_views']??1,'procs'=>$_POST['inc_procs']??1,'funcs'=>$_POST['inc_funcs']??1];
-                $sql=generateBackup($pdo,$dbName,$bOpts);
-                if(!empty($_POST['compress'])){$sql=gzencode($sql,6);$ext='.sql.gz';}else{$ext='.sql';}
-                $fn=preg_replace('/[^a-zA-Z0-9_]/','_',$dbName).'_'.date('Y-m-d_His').$ext;
-                header('Content-Type: application/octet-stream');
-                header('Content-Disposition: attachment; filename="'.$fn.'"');
-                header('Content-Length: '.strlen($sql)); echo $sql; exit;
-            }
-            break;
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// DATA QUERIES FOR VIEWS
-// ═══════════════════════════════════════════════════════════════════════════════
-$dbList=[]; $tblList=[]; $viewList=[]; $procList=[]; $funcList=[];
-try{$dbList=$pdo->query("SHOW DATABASES")->fetchAll(PDO::FETCH_COLUMN);}catch(Exception $e){}
-
-if($curDb){
-    try{$pdo->exec("USE ".qi($curDb));}catch(Exception $e){}
-    try{$tblList=$pdo->query("SHOW FULL TABLES WHERE Table_type='BASE TABLE'")->fetchAll(PDO::FETCH_COLUMN);}catch(Exception $e){}
-    try{$viewList=$pdo->query("SHOW FULL TABLES WHERE Table_type='VIEW'")->fetchAll(PDO::FETCH_COLUMN);}catch(Exception $e){}
-    try{$procList=$pdo->query("SELECT ROUTINE_NAME FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=".$pdo->quote($curDb)." AND ROUTINE_TYPE='PROCEDURE'")->fetchAll(PDO::FETCH_COLUMN);}catch(Exception $e){}
-    try{$funcList=$pdo->query("SELECT ROUTINE_NAME FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=".$pdo->quote($curDb)." AND ROUTINE_TYPE='FUNCTION'")->fetchAll(PDO::FETCH_COLUMN);}catch(Exception $e){}
-}
-
-// browse helpers
-$browseData=[];$browseCols=[];$browseTotal=0;$browsePages=0;
-$page=max(1,intval($_GET['p']??1)); $orderBy=$_GET['order']??''; $where=$_GET['where']??'';
-if($act==='browse'&&$tbl&&$curDb){
-    try{
-        $wClause=$where?" WHERE $where":'';
-        $cnt=$pdo->query("SELECT COUNT(*) FROM ".qi($tbl).$wClause)->fetchColumn();
-        $browseTotal=$cnt; $browsePages=ceil($cnt/ROWS_PER_PAGE);
-        $oClause=$orderBy?" ORDER BY $orderBy":'';
-        $off=($page-1)*ROWS_PER_PAGE;
-        $st=$pdoCols=[];
-if($act==='insert'&&$tbl&&$curDb){try{$insertCols=$pdo->query("SHOW COLUMNS FROM ".qi($tbl))->fetchAll();}catch(Exception $e){}}
-
-// view/procedure/function definition
-$viewDef='';$procDef='';$funcDef='';
-if($act==='edit_view'&&($_GET['name']??'')){try{$cr=$pdo->query("SHOW CREATE VIEW ".qi($_GET['name']))->fetch(PDO::FETCH_NUM);$viewDef=$cr[1];}catch(Exception $e){}}
-if($act==='edit_proc'&&($_GET['name']??'')){try{$cr=$pdo->query("SHOW CREATE PROCEDURE ".qi($_GET['name']))->fetch(PDO::FETCH_NUM);$procDef=$cr[2];}catch(Exception $e){}}
-if($act==='edit_func'&&($_GET['name']??'')){try{$cr=$pdo->query("SHOW CREATE FUNCTION ".qi($_GET['name']))->fetch(PDO::FETCH_NUM);$funcDef=$cr[2];}catch(Exception $e){}}
-
-// table info for browse header
-$tblInfo=null;
-if($tbl&&$curDb){try{$tblInfo=$pdo->query("SELECT TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH, ENGINE, TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=".$pdo->quote($curDb)." AND TABLE_NAME=".$pdo->quote($tbl))->fetch();}catch(Exception $e){}}
-
-// available charsets
-$charsets=[];
-try{$charsets=$pdo->query("SHOW CHARACTER SET")->fetchAll();}catch(Exception $e){}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// RENDER HTML
-// ═══════════════════════════════════════════════════════════════════════════════
-function showLogin($err=''){?>
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MiniDB insert form columns
-$insert->query("SELECT * FROM ".qi($tbl).$wClause.$oClause." LIMIT ".ROWS_PER_PAGE." OFFSET $off");
-        $browseCols=array_map(function($i)use($st){return $st->getColumnMeta($i)['name'];},range(0,$st->columnCount()-1));
-        $browseData=$st->fetchAll(PDO::FETCH_NUM);
-    }catch(PDOException $e){$err=$e->getMessage();}
-}
-
-// structure helpers
-$structCols=[];$structIdx=[];$structCreate='';
-if(in_array($act,['structure','add_column'])&&$tbl&&$curDb){
-    try{$structCols=$pdo->query("SHOW FULL COLUMNS FROM ".qi($tbl))->fetchAll();}catch(Exception $e){}
-    try{$structIdx=$pdo->query("SHOW INDEX FROM ".qi($tbl))->fetchAll();}catch(Exception $e){}
-    try{$cr=$pdo->query("SHOW CREATE TABLE ".qi($tbl))->fetch(PDO::FETCH_NUM);$structCreate=$cr[1];}catch(Exception $e){}
-}
-
-// edit row data
-$editRow=[];$editCols=[];
-if($act==='edit'&&$tbl&&$curDb){
-    try{
-        $editCols=$pdo->query("SHOW COLUMNS FROM ".qi($tbl))->fetchAll();
-        $pkCols=[];foreach($editCols as $c){if($c['Key']==='PRI')$pkCols[]=$c['Field'];}
-        if(!$pkCols)$pkCols=array_column($editCols,'Field');
-        $wh=[];$ps=[];
-        foreach($pkCols as $pk){$v=$_GET['pk_'.urlencode($pk)]??'';$wh[]=qi($pk)."=?";$ps[]=$v;}
-        $st=$pdo->prepare("SELECT * FROM ".qi($tbl)." WHERE ".implode(' AND ',$wh)." LIMIT 1");
-        $st->execute($ps);$editRow=$st->fetch();
-    }catch(PDOException $e){$err=$e->getMessage();}
-}
-
-//A — Login</:var(--mu);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
-input[type=text],input[type=password],input[type=number]{width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-family:var(--fm);font-size:13px;margin-bottom:16px;outline:none;transition:border .2s}
-input:focus{border-color:var(--ac)}
-.row{display:flex;gap:12px}.row>div{flex:1}
-button{width:100%;padding:11px;background:var(--ac);color:#fff;border:none;border-radius:6px;font-family:var(--fn);font-size:14px;font-weight:600;cursor:pointer;transition:background .2s}
-button:hover{background:var(--ac2)}
-.er{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--er);padding:10px 12px;border-radius:6px;font-size:13px;margin-bottom:16px}
-</style></head><body>
-<div class="login-box">
-<h1>MiniDBA</h1><p class="sub">MariaDB Management Tool</p>
-<?php if($err):?><div class="er"><?=eh($err)?></div><?php endif;?>
-<form method="POST"><input type="hidden" name="act" value="login">
-<div class="row"><div><label>Host</label><input type="text" name="host" value="127.0.0.1"></div>
-<div><label>Port</label><input type="number" name="port" value="3306"></div></div>
-<label>Username</label><input type="text" name="user" required autofocus>
-<label>Password</label><input type="password" name="pass">
-<button type="submit">Connect</button></form></div></body></html>
-<?php }
-
-// ── Main Interface ────────────────────────────────────────────────────────────
+if (!isset($_SESSION['authenticated']) || !$_SESSION['authenticated']) { header('Location: index.php'); exit; }
+$rootFolder = $_SESSION['rootFolder'];
+$username   = $_SESSION['username'];
 ?>
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title><?=eh($curDb?"$curDb — ":"")?>MiniDBA</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>File Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0c0e14;--s:#151822;--s2:#1c2030;--s3:#252a3a;--ac:#10b981;--ac2:#059669;--acbg:rgba(16,185,129,.1);--er:#ef4444;--erbg:rgba(239,68,68,.08);--warn:#f59e0b;--info:#3b82f6;--tx:#e2e8f0;--mu:#64748b;--bd:#1e2233;--fn:'DM Sans',system-ui,sans-serif;--fm:'DM Mono','Consolas',monospace}
-html{font-size:14px}body{background:var(--bg);color:var(--tx);font-family:var(--fn);min-height:100vh}
-a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
-.app{display:flex;flex-direction:column;height:100vh}
-header{background:var(--s);border-bottom:1px solid var(--bd);padding:0 20px;height:48px;display:flex;align-items:center;gap:16px;flex-shrink:0}
-header .logo{font-weight:700;font-size:16px;color:var(--ac);letter-spacing:-.5px}
-header .logo span{color:var(--mu);font-weight:400;font-size:12px;margin-left:6px}
-header .sep{width:1px;height:24px;background:var(--bd)}
-header select{background:var(--s2);border:1px solid var(--bd);color:var(--tx);padding:5px 8px;border-radius:4px;font-family:var(--fm);font-size:12px;cursor:pointer}
-header .spacer{flex:1}
-header .user{font-size:12px;color:var(--mu);font-family:var(--fm)}
-header a.btn-sm{font-size:12px;padding:5px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:4px;color:var(--tx);transition:all .2s}
-header a.btn-sm:hover{background:var(--s3);text-decoration:none}
-.layout{display:flex;flex:1;overflow:hidden}
-aside{width:240px;background:var(--s);border-right:1px solid var(--bd);overflow-y:auto;flex-shrink:0;padding:12px 0}
-aside .sec{padding:6px 16px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--mu);font-weight:600;margin-top:8px}
-aside a{display:block;padding:5px 16px;font-size:13px;color:var(--tx);transition:background .15s}
-aside a:hover{background:var(--s2);text-decoration:none}
-aside a.active{background:var(--acbg);color:var(--ac);border-right:2px solid var(--ac)}
-aside a .cnt{float:right;color:var(--mu);font-size:11px;font-family:var(--fm)}
-main{flex:1;overflow:auto;padding:20px 24px}
-.tabs{display:flex;gap:0;border-bottom:1px solid var(--bd);margin-bottom:20px}
-.tabs a{padding:8px 16px;font-size:13px;color:var(--mu);border-bottom:2px solid transparent;transition:all .2s}
-.tabs a:hover{color:var(--tx);text-decoration:none}
-.tabs a.active{color:var(--ac);border-bottom-color:var(--ac)}
-h2{font-size:18px;font-weight:700;margin-bottom:16px}
-h3{font-size:15px;font-weight:600;margin:16px 0 8px}
-.alert{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:16px}
-.alert-error{background:var(--erbg);border:1px solid rgba(239,68,68,.2);color:var(--er)}
-.alert-success{background:var(--acbg);border:1px solid rgba(16,185,129,.2);color:var(--ac)}
-table.dt{width:100%;border-collapse:collapse;font-size:13px}
-table.dt th{background:var(--s2);text-align:left;padding:8px 10px;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--mu);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:1}
-table.dt td{padding:7px 10px;border-bottom:1px solid var(--bd);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-table.dt tr:hover td{background:var(--s2)}
-table.dt td.nw{white-space:nowrap;font-family:var(--fm);font-size:12px}
-table.dt td.null{color:var(--mu);font-style:italic}
-table.dt td.blob{color:var(--warn);font-family:var(--fm);font-size:11px}
-table.dt td a{color:var(--ac)}
-.pagination{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--mu)}
-.pagination a,.pagination span{padding:4px 10px;border:1px solid var(--bd);border-radius:4px;font-family:var(--fm)}
-.pagination a:hover{background:var(--s2);text-decoration:none}
-.pagination .cur{background:var(--ac);color:#fff;border-color:var(--ac)}
-form.inline{display:inline}
-input[type=text],input[type=number],input[type=password],textarea,select{
-    background:var(--s2);border:1px solid var(--bd);color:var(--tx);padding:7px 10px;border-radius:4px;font-family:var(--fm);font-size:13px;outline:none;transition:border .2s}
-input:focus,textarea:focus,select:focus{border-color:var(--ac)}
-textarea{resize:vertical;min-height:80px;font-family:var(--fm)}
-label{display:block;font-size:12px;font-weight:500;color:var(--mu);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px}
-.btn{display:inline-block;padding:7px 16px;border:none;border-radius:4px;font-family:var(--fn);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}
-.btn-ac{background:var(--ac);color:#fff}.btn-ac:hover{background:var(--ac2)}
-.btn-er{background:var(--er);color:#fff}.btn-er:hover{background:#dc2626}
-.btn-ghost{background:transparent;border:1px solid var(--bd);color:var(--tx)}.btn-ghost:hover{background:var(--s2)}
-.btn-warn{background:var(--warn);color:#000}
-.form-row{margin-bottom:14px}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.col-editor{border:1px solid var(--bd);border-radius:6px;overflow:hidden;margin-bottom:12px}
-.col-editor .col-row{display:grid;grid-template-columns:1.5fr 1.2fr auto auto auto auto auto;gap:6px;padding:6px 10px;border-bottom:1px solid var(--bd);align-items:center;font-size:12px}
-.col-editor .col-row:last-child{border-bottom:none}
-.col-editor .hdr{background:var(--s2);font-weight:600;color:var(--mu);font-size:10px;text-transform:uppercase;letter-spacing:.5px}
-.col-editor input,.col-editor select{padding:5px 6px;font-size:12px}
-.col-editor input[type=checkbox]{width:14px;height:14px}
-.filter-bar{display:flex;gap:8px;margin-bottom:12px;align-items:center}
-.filter-bar input{flex:1}
-.info-bar{font-size:12px;color:var(--mu);margin-bottom:12px;font-family:var(--fm)}
-.code-block{background:var(--s2);border:1px solid var(--bd);border-radius:6px;padding:14px;font-family:var(--fm);font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:400px;overflow:auto;margin:8px 0}
-.actions-cell{display:flex;gap:4px}
-.actions-cell .btn{padding:3px 8px;font-size:11px}
-@media(max-width:900px){.layout{flex-direction:column}aside{width:100%;max-height:200px;border-right:none;border-bottom:1px solid var(--bd)}}
-</style></head><body>
-<div class="app">
-<!-- HEADER -->
-<header>
-    <div class="logo">MiniDBA<span>v1.0</span></div>
-    <div class="sep"></div>
-    <form method="GET" style="display:flex;align-items:center;gap:8px">
-        <select name="db" onchange="this.form.submit()" style="min-width:160px">
-            <option value="">— Select Database —</option>
-            <?php foreach($dbList as $d):?><option value="<?=eh($d)?>"<?=($curDb===$d?' selected':'')?>><?=eh($d)?></option><?php endforeach;?>
-        </select>
-        <?php if($tbl):?><input type="hidden" name="table" value="<?=eh($tbl)?>"><?php endif;?>
-        <input type="hidden" name="act" value="<?=eh($act)?>">
-    </form>
-    <div class="spacer"></div>
-    <span class="user"><?=eh($me)?>@<?=eh($mh)?>:<?=eh($mp)?></span>
-    <a href="?act=logout" class="btn-sm">Logout</a>
-</header>
-<div class="layout">
-<!-- SIDEBAR -->
-<aside>
-    <div class="sec">Navigation</div>
-    <a href="?act=databases" class="<?=($act==='databases'?'active':'')?>">Databases</a>
-    <?php if($curDb):?>
-    <a href="?act=tables&db=<?=eh($curDb)?>" class="<?=($act==='tables'?'active':'')?>">Tables <span class="cnt"><?=count($tblList)?></span></a>
-    <a href="?act=views&db=<?=eh($curDb)?>" class="<?=($act==='views'||$act==='edit_view'?'active':'')?>">Views <span class="cnt"><?=count($viewList)?></span></a>
-    <a href="?act=procedures&db=<?=eh($curDb)?>" class="<?=($act==='procedures'||$act==='edit_proc'?'active':'')?>">Procedures <span class="cnt"><?=count($procList)?></span></a>
-    <a href="?act=functions&db=<?=eh($curDb)?>" class="<?=($act==='functions'||$act==='edit_func'?'active':'')?>">Functions <span class="cnt"><?=count($funcList)?></span></a>
-    <div class="sec">Tools</div>
-    <a href="?act=sql&db=<?=eh($curDb)?>" class="<?=($act==='sql'?'active':'')?>">SQL Query</a>
-    <a href="?act=backup&db=<?=eh($curDb)?>" class="<?=($act==='backup'?'active':'')?>">Backup</a>
-    <a href="?act=restore&db=<?=eh($curDb)?>" class="<?=($act==='restore'?'active':'')?>">Restore</a>
-    <?php endif;?>
-    <?php if($tbl&&$curDb):?>
-    <div class="sec">Table: <?=eh($tbl)?></div>
-    <a href="?act=browse&db=<?=eh($curDb)?>&table=<?=eh($tbl)?>" class="<?=($act==='browse'?'active':'')?>">Browse</a>
-    <a href="?act=structure&db=<?=eh($curDb)?>&table=<?=eh($tbl)?>" class="<?=($act==='structure'||$act==='add_column'?'active':'')?>">Structure</a>
-    <a href="?act=insert&db=<?=eh($curDb)?>&table=<?=eh($tbl)?>" class="<?=($act==='insert'?'active':'')?>">Insert</a>
-    <?php endif;?>
-</aside>
-<!-- MAIN -->
-<main>
-<?php if($msg):?><div class="alert alert-success"><?=eh($msg)?></div><?php endif;?>
-<?php if($err):?><div class="alert alert-error"><?=$err?></div><?php endif;?>
-
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// VIEW: DATABASES
-// ═══════════════════════════════════════════════════════════════════════════
-if($act==='databases'):
-    $dbSizes=[];
-    try{$dbSizes=$pdo->query("SELECT TABLE_SCHEMA,SUM(DATA_LENGTH+INDEX_LENGTH) sz FROM information_schema.TABLES GROUP BY TABLE_SCHEMA")->fetchAll(PDO::FETCH_KEY_PAIR);}catch(Exception $e){}
-?>
-<h2>Databases</h2>
-<table class="dt"><thead><tr><th>Database</th><th>Size</th><th>Actions</th></tr></thead><tbody>
-<?php foreach($dbList as $d):?>
-<tr>
-    <td><a href="?db=<?=eh($d)?>&act=tables"><?=eh($d)?></a></td>
-    <td class="nw"><?=isset($dbSizes[$d])?fmtBytes($dbSizes[$d]):'—'?></td>
-    <td><form method="POST" class="inline" onsubmit="return confirm('Drop database <?=eh($d)?>?')"><input type="hidden" name="act" value="drop_db"><input type="hidden" name="name" value="<?=eh($d)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>"><button class="btn btn-er" style="padding:3px 8px;font-size:11px">Drop</button></form></td>
-</tr>
-<?php endforeach;?>
-</tbody></table>
-<h3>Create Database</h3>
-<form method="POST" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-    <input type="hidden" name="act" value="create_db"><input type="hidden" name="_csrf" value="<?=csrf()?>">
-    <div><label>Name</label><input type="text" name="name" required style="min-width:200px"></div>
-    <div><label>Charset</label><select name="charset"><?php foreach($charsets as $cs):?><option value="<?=eh($cs['Charset'])?>"><?=eh($cs['Charset'])?></option><?php endforeach;?></select></div>
-    <button class="btn btn-ac">Create</button>
-</form>
-
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// VIEW: TABLES
-// ═══════════════════════════════════════════════════════════════════════════
-elseif($act==='tables'&&$curDb):
-    $tblSizes=[];
-    try{$tblSizes=$pdo->query("SELECT TABLE_NAME,TABLE_ROWS,DATA_LENGTH+INDEX_LENGTH sz,ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=".$pdo->quote($curDb))->fetchAll(PDO::FETCH_ASSOC);}catch(Exception $e){}
-    $sizeMap=[];foreach($tblSizes as $t)$sizeMap[$t['TABLE_NAME']]=$t;
-?>
-<h2>Tables — <?=eh($curDb)?></h2>
-<table class="dt"><thead><tr><th>Table</th><th>Engine</th><th>Rows</th><th>Size</th><th>Actions</th></tr></thead><tbody>
-<?php foreach($tblList as $t): $inf=$sizeMap[$t]??null;?>
-<tr>
-    <td><a href="?act=browse&db=<?=eh($curDb)?>&table=<?=eh($t)?>"><?=eh($t)?></a></td>
-    <td class="nw"><?=eh($inf['ENGINE']??'')?></td>
-    <td class="nw"><?=number_format($inf['TABLE_ROWS']??0)?></td>
-    <td class="nw"><?=isset($inf['sz'])?fmtBytes($inf['sz']):'—'?></td>
-    <td class="actions-cell">
-        <a href="?act=structure&db=<?=eh($curDb)?>&table=<?=eh($t)?>" class="btn btn-ghost">Struct</a>
-        <form method="POST" class="inline" onsubmit="return confirm('Truncate <?=eh($t)?>?')"><input type="hidden" name="act" value="truncate"><input type="hidden" name="table" value="<?=eh($t)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>"><button class="btn btn-warn" style="padding:3px 8px;font-size:11px">Trunc</button></form>
-        <form method="POST" class="inline" onsubmit="return confirm('DROP table <?=eh($t)?>?')"><input type="hidden" name="act" value="drop_table"><input type="hidden" name="table" value="<?=eh($t)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>"><button class="btn btn-er" style="padding:3px 8px;font-size:11px">Drop</button></form>
-    </td>
-</tr>
-<?php endforeach;?>
-</tbody></table>
-
-<h3>Create Table</h3>
-<form method="POST" id="ctForm">
-    <input type="hidden" name="act" value="create_table"><input type="hidden" name="_csrf" value="<?=csrf()?>">
-    <div style="display:flex;gap:12px;margin-bottom:12px;align-items:flex-end;flex-wrap:wrap">
-        <div><label>Table Name</label><input type="text" name="tname" required style="min-width:200px"></div>
-        <div><label>Engine</label><select name="engine"><option>InnoDB</option><option>MyISAM</option><option>Aria</option><option>MEMORY</option></select></div>
-        <div><label>Charset</label><select name="charset"><?php foreach($charsets as $cs):?><option value="<?=eh($cs['Charset'])?>"<?=($cs['Charset']==='utf8mb4'?' selected':'')?>><?=eh($cs['Charset'])?></option><?php endforeach;?></select></div>
-    </div>
-    <div class="col-editor" id="colEditor">
-        <div class="col-row hdr"><span>Name</span><span>Type</span><span>NN</span><span>PK</span><span>AI</span><span>Default</span><span></span></div>
-        <div class="col-row" data-idx="0"><input type="text" name="cols[0][field]" placeholder="id" required><select name="cols[0][type]"><option>INT</option><option>BIGINT</option><option>VARCHAR(255)</option><option>TEXT</option><option>DATETIME</option><option>DATE</option><option>DECIMAL(10,2)</option><option>BLOB</option><option>TINYINT</option><option>BOOLEAN</option><option>JSON</option></select><input type="checkbox" name="cols[0][nn]" value="1"><input type="checkbox" name="cols[0][pk]" value="1" checked><input type="checkbox" name="cols[0][ai]" value="1" checked><input type="text" name="cols[0][default]" placeholder="NULL" style="width:80px"><button type="button" class="btn btn-er" style="padding:3px 6px;font-size:11px" onclick="this.closest('.col-row').remove()">✕</button></div>
-    </div>
-    <button type="button" class="btn btn-ghost" onclick="addCol()" style="margin-bottom:12px">+ Add Column</button>
-    <div><button class="btn btn-ac" type="submit">Create Table</button></div>
-</form>
-<script>
-let colIdx=1;
-function addCol(){
-    let d=document.createElement('div');d.className='col-row';d.dataset.idx=colIdx;
-    d.innerHTML='<input type="text" name="cols['+colIdx+'][field]" placeholder="column_name" required><select name="cols['+colIdx+'][type]"><option>VARCHAR(255)</option><option>INT</option><option>BIGINT</option><option>TEXT</option><option>DATETIME</option><option>DATE</option><option>DECIMAL(10,2)</option><option>BLOB</option><option>TINYINT</option><option>BOOLEAN</option><option>JSON</option></select><input type="checkbox" name="cols['+colIdx+'][nn]" value="1"><input type="checkbox" name="cols['+colIdx+'][pk]" value="1"><input type="checkbox" name="cols['+colIdx+'][ai]" value="1"><input type="text" name="cols['+colIdx+'][default]" placeholder="" style="width:80px"><button type="button" class="btn btn-er" style="padding:3px 6px;font-size:11px" onclick="this.closest(\'.col-row\').remove()">✕</button>';
-    document.getElementById('colEditor').appendChild(d);colIdx++;
+/* ========================================
+   RESET & BASE
+   ======================================== */
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0b0d13;--panel:#11141e;--surface:#171b28;--hover:#1e2336;--active:#252a40;
+  --text:#e4e7f0;--dim:#8890a8;--muted:#555b73;
+  --accent:#5e9eff;--accent-h:#4b8cf0;--accent-bg:rgba(94,158,255,.12);
+  --danger:#ff5c6c;--danger-h:#e84d5c;--danger-bg:rgba(255,92,108,.12);
+  --success:#4ade80;--success-bg:rgba(74,222,128,.12);
+  --warning:#fbbf24;--warning-bg:rgba(251,191,36,.12);
+  --border:#1f2437;--border-l:#2a3048;
+  --r:6px;--r-lg:10px;
+  --sidebar-w:280px;--header-h:52px;--toolbar-h:46px;--status-h:30px;
 }
-</script>
+html,body{height:100%;overflow:hidden}
+body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);font-size:14px}
 
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// VIEW: BROWSE TABLE DATA
-// ═══════════════════════════════════════════════════════════════════════════
-elseif($act==='browse'&&$tbl&&$curDb):
-?>
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <h2 style="margin:0"><?=eh($tbl)?> — Browse</h2>
-    <div style="display:flex;gap:8px">
-        <?php if($tblInfo):?><span class="info-bar"><?=number_format($browseTotal)?> rows · <?=eh($tblInfo['ENGINE']??'')?> · <?=fmtBytes(($tblInfo['DATA_LENGTH']??0)+($tblInfo['INDEX_LENGTH']??0))?></span><?php endif;?>
-        <a href="?act=insert&db=<?=eh($curDb)?>&table=<?=eh($tbl)?>" class="btn btn-ac">+ Insert</a>
+/* Scrollbar */
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-l);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+
+/* ========================================
+   LAYOUT
+   ======================================== */
+#app{display:flex;flex-direction:column;height:100vh}
+#header{height:var(--header-h);background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:16px;flex-shrink:0;z-index:50}
+.header-left{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.header-left h1{font-size:16px;font-weight:700;white-space:nowrap;letter-spacing:-.3px}
+#sidebar-toggle{background:none;border:none;color:var(--dim);cursor:pointer;padding:4px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;transition:color .2s,background .2s}
+#sidebar-toggle:hover{color:var(--text);background:var(--hover)}
+#breadcrumb{flex:1;display:flex;align-items:center;gap:2px;overflow-x:auto;white-space:nowrap;font-size:13px;min-width:0}
+.crumb{color:var(--dim);cursor:pointer;padding:3px 6px;border-radius:4px;transition:color .15s,background .15s;flex-shrink:0}
+.crumb:hover{color:var(--text);background:var(--hover)}
+.crumb.active{color:var(--text);font-weight:600}
+.crumb-sep{color:var(--muted);font-size:11px;flex-shrink:0}
+.header-right{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.user-badge{font-size:12px;color:var(--dim);background:var(--surface);padding:4px 10px;border-radius:20px;border:1px solid var(--border)}
+.btn-logout{font-size:12px;color:var(--dim);text-decoration:none;padding:5px 12px;border-radius:var(--r);border:1px solid var(--border);transition:all .2s}
+.btn-logout:hover{color:var(--danger);border-color:var(--danger);background:var(--danger-bg)}
+
+#main{display:flex;flex:1;overflow:hidden}
+
+/* Sidebar */
+#sidebar{width:var(--sidebar-w);min-width:200px;max-width:500px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:margin-left .25s ease}
+#sidebar.collapsed{margin-left:calc(var(--sidebar-w) * -1)}
+.sidebar-head{padding:10px 14px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);border-bottom:1px solid var(--border)}
+#tree-wrap{flex:1;overflow-y:auto;overflow-x:hidden;padding:6px 0}
+
+/* Resize Handle */
+#resize-handle{width:4px;cursor:col-resize;background:transparent;transition:background .2s;flex-shrink:0;position:relative;z-index:10}
+#resize-handle:hover,#resize-handle.active{background:var(--accent)}
+
+/* Content */
+#content{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;min-width:0}
+
+/* Toolbar */
+#toolbar{height:var(--toolbar-h);background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:4px;flex-shrink:0}
+.tb-group{display:flex;align-items:center;gap:2px}
+.tb-sep{width:1px;height:22px;background:var(--border);margin:0 6px}
+.tb-spacer{flex:1}
+.tb{background:none;border:1px solid transparent;color:var(--dim);cursor:pointer;padding:5px 10px;border-radius:var(--r);font-family:'Outfit',sans-serif;font-size:12px;font-weight:500;display:flex;align-items:center;gap:5px;transition:all .15s;white-space:nowrap}
+.tb:hover:not(:disabled){color:var(--text);background:var(--hover);border-color:var(--border)}
+.tb:disabled{opacity:.35;cursor:default}
+.tb.danger:hover:not(:disabled){color:var(--danger);background:var(--danger-bg);border-color:rgba(255,92,108,.25)}
+.tb svg{width:14px;height:14px;flex-shrink:0}
+
+/* Upload Progress */
+#upload-bar{display:none;padding:0;height:3px;background:var(--surface);flex-shrink:0}
+#upload-bar.show{display:block}
+#upload-fill{height:100%;background:linear-gradient(90deg,var(--accent),#8b5cf6);width:0%;transition:width .3s;border-radius:0 2px 2px 0}
+
+/* File List Header */
+#list-head{display:grid;grid-template-columns:32px 28px 1fr 100px 150px 70px;align-items:center;height:32px;padding:0 12px 0 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);background:var(--panel);flex-shrink:0;user-select:none}
+.lh-sort{cursor:pointer;transition:color .15s}
+.lh-sort:hover{color:var(--text)}
+#list-head input[type=checkbox]{accent-color:var(--accent);cursor:pointer}
+
+/* File List */
+#file-list{flex:1;overflow-y:auto;padding:4px 0}
+.fr{display:grid;grid-template-columns:32px 28px 1fr 100px 150px 70px;align-items:center;padding:0 12px;height:34px;cursor:pointer;transition:background .1s;animation:fadeRow .2s ease forwards;opacity:0}
+.fr:nth-child(1){animation-delay:.02s}
+.fr:nth-child(2){animation-delay:.04s}
+.fr:nth-child(3){animation-delay:.06s}
+.fr:nth-child(4){animation-delay:.08s}
+.fr:nth-child(5){animation-delay:.1s}
+.fr:nth-child(6){animation-delay:.12s}
+.fr:nth-child(7){animation-delay:.14s}
+.fr:nth-child(8){animation-delay:.16s}
+.fr:nth-child(9){animation-delay:.18s}
+.fr:nth-child(10){animation-delay:.2s}
+@keyframes fadeRow{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.fr:hover{background:var(--hover)}
+.fr.selected{background:var(--accent-bg)}
+.fr input[type=checkbox]{accent-color:var(--accent);cursor:pointer}
+.fr-icon{display:flex;align-items:center;justify-content:center}
+.fr-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'JetBrains Mono',monospace;font-size:12px}
+.fr-name.is-dir{color:var(--warning)}
+.fr-name.is-text{color:var(--accent)}
+.fr-size,.fr-date,.fr-perm{font-size:12px;color:var(--dim);font-family:'JetBrains Mono',monospace}
+
+/* Empty State */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--muted);gap:8px;padding:40px}
+.empty-state svg{opacity:.3}
+.empty-state p{font-size:13px}
+
+/* Loading */
+.loading{display:flex;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--dim)}
+.spinner{width:20px;height:20px;border:2.5px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Status Bar */
+#status-bar{height:var(--status-h);background:var(--panel);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:11px;color:var(--muted);flex-shrink:0}
+
+/* Drop Overlay */
+#drop-overlay{position:absolute;inset:0;background:rgba(11,13,19,.88);z-index:80;display:flex;align-items:center;justify-content:center;border:3px dashed var(--accent);border-radius:var(--r-lg);margin:8px;opacity:0;pointer-events:none;transition:opacity .2s}
+#drop-overlay.show{opacity:1;pointer-events:auto}
+.drop-inner{text-align:center;color:var(--accent)}
+.drop-inner svg{margin-bottom:12px;opacity:.7}
+.drop-inner p{font-size:15px;font-weight:600}
+.drop-inner span{font-size:12px;color:var(--dim)}
+
+/* ========================================
+   TREE
+   ======================================== */
+.tree-node{}
+.tree-row{display:flex;align-items:center;gap:4px;padding:3px 12px;cursor:pointer;border-radius:0;transition:background .1s;user-select:none}
+.tree-row:hover{background:var(--hover)}
+.tree-row.active{background:var(--accent-bg)}
+.tree-row.active .tree-name{color:var(--accent);font-weight:600}
+.tree-toggle{width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--muted);transition:transform .15s}
+.tree-toggle svg{width:9px;height:9px}
+.tree-node.expanded>.tree-row .tree-toggle{transform:rotate(90deg)}
+.tree-toggle.no-children{visibility:hidden}
+.tree-icon{width:16px;height:16px;flex-shrink:0;display:flex;align-items:center}
+.tree-name{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.tree-children{display:none;padding-left:0}
+.tree-node.expanded>.tree-children{display:block}
+
+/* ========================================
+   MODALS
+   ======================================== */
+.modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center}
+.modal.hidden{display:none}
+.modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
+.modal-box{position:relative;background:var(--panel);border:1px solid var(--border-l);border-radius:var(--r-lg);box-shadow:0 24px 64px rgba(0,0,0,.5);display:flex;flex-direction:column;animation:mIn .2s ease}
+@keyframes mIn{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+.modal-lg{width:92vw;height:88vh;max-width:1500px}
+.modal-sm{width:420px;max-width:92vw}
+.modal-hd{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0}
+.modal-hd h3{font-size:14px;font-weight:600}
+.modal-close{background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;padding:2px 6px;border-radius:var(--r);transition:all .15s;line-height:1}
+.modal-close:hover{color:var(--text);background:var(--hover)}
+.modal-ft{display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--border);flex-shrink:0}
+.modal-bd{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.modal-bd p{font-size:13px;color:var(--dim);line-height:1.6}
+.modal-bd input[type=text]{width:100%;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;outline:0;margin-top:12px;transition:border .2s}
+.modal-bd input[type=text]:focus{border-color:var(--accent)}
+#editor-wrap{flex:1;position:relative}
+#ace-editor{position:absolute;inset:0}
+
+/* Buttons */
+.btn{padding:7px 18px;border-radius:var(--r);font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:all .15s}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent-h)}
+.btn-ghost{background:transparent;color:var(--dim);border-color:var(--border)}
+.btn-ghost:hover{color:var(--text);background:var(--hover)}
+
+/* ========================================
+   TOAST
+   ======================================== */
+#toasts{position:fixed;bottom:16px;right:16px;z-index:300;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none}
+.toast{pointer-events:auto;padding:11px 16px;border-radius:var(--r);font-size:13px;font-weight:500;animation:tIn .3s ease;display:flex;align-items:center;gap:8px;min-width:260px;max-width:420px;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+@keyframes tIn{from{opacity:0;transform:translateX(32px)}to{opacity:1;transform:translateX(0)}}
+.toast.t-ok{background:var(--success-bg);border:1px solid rgba(74,222,128,.3);color:var(--success)}
+.toast.t-err{background:var(--danger-bg);border:1px solid rgba(255,92,108,.3);color:var(--danger)}
+.toast.t-info{background:var(--accent-bg);border:1px solid rgba(94,158,255,.3);color:var(--accent)}
+
+/* Responsive */
+@media(max-width:800px){
+  #sidebar{position:fixed;left:0;top:var(--header-h);bottom:0;z-index:60}
+  #sidebar.collapsed{margin-left:calc(var(--sidebar-w) * -1)}
+  .fr-date,.fr-perm,#list-head .fr-date,#list-head .fr-perm{display:none}
+  #list-head,.fr{grid-template-columns:32px 28px 1fr 90px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <header id="header">
+    <div class="header-left">
+      <button id="sidebar-toggle" onclick="App.toggleSidebar()" title="Toggle sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+      </button>
+      <h1>File Manager</h1>
     </div>
-</div>
-<form class="filter-bar" method="GET">
-    <input type="hidden" name="act" value="browse"><input type="hidden" name="db" value="<?=eh($curDb)?>"><input type="hidden" name="table" value="<?=eh($tbl)?>">
-    <input type="text" name="where" placeholder="WHERE clause (e.g. id > 10)" value="<?=eh($where)?>" style="flex:1">
-    <button class="btn btn-ghost">Filter</button>
-    <?php if($where):?><a href="?act=browse&db=<?=eh($curDb)?>&table=<?=eh($tbl)?>" class="btn btn-ghost">Clear</a><?php endif;?>
-</form>
-<div style="overflow-x:auto">
-<table class="dt"><thead><tr>
-<?php foreach($browseCols as $c): $od=($orderBy===qi($c))?(qi($c)." DESC"):qi($c);?>
-<th><a href="?act=browse&db=<?=eh($curDb)?>&table=<?=eh($tbl)?>&where=<?=urlencode($where)?>&order=<?=urlencode($od)?>"><?=eh($c)?></a></th>
-<?php endforeach;?>
-<th>Actions</th>
-</tr></thead><tbody>
-<?php if(!$browseData):?><tr><td colspan="<?=count($browseCols)+1?>" style="text-align:center;color:var(--mu);padding:30px">No data</td></tr><?php endif;?>
-<?php foreach($browseData as $ri=>$row):?>
-<tr>
-<?php foreach($row as $ci=>$v):
-    $colName=$browseCols[$ci]; $isBlob=false;
-    try{$colMeta=$structCols?:[]; foreach($colMeta as $cm){if($cm['Field']===$colName&&preg_match('/(blob|binary)/i',$cm['Type'])){$isBlob=true;break;}}}catch(Exception $ex){}
-?>
-<td class="<?=($v===null?'null':($isBlob?'blob':''))?>" title="<?=eh($v===null?'NULL':($isBlob?'[BLOB '.strlen($v).' bytes]':$v))?>"><?=($v===null?'NULL':($isBlob?'[BLOB '.strlen($v).'B]':eh($v)))?></td>
-<?php endforeach;?>
-<td class="actions-cell">
-<?php
-// build PK link
-$pkLink='act=edit&db='.urlencode($curDb).'&table='.urlencode($tbl);
-foreach($browseCols as $ci=>$cn){$pkLink.='&pk_'.urlencode($cn).'='.urlencode($row[$ci]??'');}
-?>
-<a href="?<?=$pkLink?>" class="btn btn-ghost">Edit</a>
-<form method="POST" class="inline" onsubmit="return confirm('Delete this row?')"><input type="hidden" name="act" value="delete_row"><input type="hidden" name="table" value="<?=eh($tbl)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>"><input type="hidden" name="where" value="<?php
-$wh=[];foreach($browseCols as $ci=>$cn){$v=$row[$ci];$wh[]=qi($cn).($v===null?' IS NULL':"='".escSQL($v)."'");}
-echo eh(implode(' AND ',$wh));
-?>"><button class="btn btn-er" style="padding:3px 8px;font-size:11px">Del</button></form>
-</td>
-</tr>
-<?php endforeach;?>
-</tbody></table>
-</div>
-<?php if($browsePages>1):?>
-<div class="pagination">
-<?php if($page>1):?><a href="?act=browse&db=<?=eh($curDb)?>&table=<?=eh($tbl)?>&p=<?=$page-1?>&where=<?=urlencode($where)?>&order=<?=urlencode($orderBy)?>">&laquo; Prev</a><?php endif;?>
-<?php for($i=max(1,$page-3);$i<=min($browsePages,$page+3);$i++):?>
-<?php if($i===$page):?><span class="cur"><?=$i?></span><?php else:?><a href="?act=browse&db=<?=eh($curDb)?>&table=<?=eh($tbl)?>&p=<?=$i?>&where=<?=urlencode($where)?>&order=<?=urlencode($orderBy)?>"><?=$i?></a><?php endif;?>
-<?php endfor;?>
-<?php if($page<$browsePages):?><a href="?act=browse&db=<?=eh($curDb)?>&table=<?=eh($tbl)?>&p=<?=$page+1?>&where=<?=urlencode($where)?>&order=<?=urlencode($orderBy)?>">Next &raquo;</a><?php endif;?>
-<span style="margin-left:8px"><?=number_format($browseTotal)?> rows total</span>
-</div>
-<?php endif;?>
-
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// VIEW: TABLE STRUCTURE
-// ═══════════════════════════════════════════════════════════════════════════
-elseif(($act==='structure'||$act==='add_column')&&$tbl&&$curDb):
-?>
-<h2><?=eh($tbl)?> — Structure</h2>
-<div class="tabs">
-    <a href="?act=structure&db=<?=eh($curDb)?>&table=<?=eh($tbl)?>" class="active">Columns</a>
-    <a href="#" onclick="document.getElementById('idxSection').scrollIntoView();return false">Indexes</a>
-    <a href="#" onclick="document.getElementById('createSection').scrollIntoView();return false">CREATE SQL</a>
-</div>
-<table class="dt"><thead><tr><th>#</th><th>Column</th><th>Type</th><th>Nullable</th><th>Default</th><th>Key</th><th>Extra</th><th>Actions</th></tr></thead><tbody>
-<?php foreach($structCols as $i=>$c):?>
-<tr>
-    <td class="nw"><?=$i+1?></td>
-    <td><strong><?=eh($c['Field'])?></strong></td>
-    <td class="nw"><?=eh($c['Type'])?></td>
-    <td class="nw"><?=eh($c['Null'])?></td>
-    <td class="nw"><?=eh($c['Default']??'NULL')?></td>
-    <td class="nw"><?=eh($c['Key'])?></td>
-    <td class="nw"><?=eh($c['Extra'])?></td>
-    <td><form method="POST" class="inline" onsubmit="return confirm('Drop column <?=eh($c['Field'])?>?')"><input type="hidden" name="act" value="drop_column"><input type="hidden" name="table" value="<?=eh($tbl)?>"><input type="hidden" name="column" value="<?=eh($c['Field'])?>"><input type="hidden" name="_csrf" value="<?=csrf()?>"><button class="btn btn-er" style="padding:3px 8px;font-size:11px">Drop</button></form></td>
-</tr>
-<?php endforeach;?>
-</tbody></table>
-
-<h3>Add Column</h3>
-<form method="POST" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-    <input type="hidden" name="act" value="add_column"><input type="hidden" name="table" value="<?=eh($tbl)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>">
-    <div><label>Name</label><input type="text" name="field" required></div>
-    <div><label>Type</label><input type="text" name="type" value="VARCHAR(255)" style="width:150px"></div>
-    <div><label>Not Null</label><input type="checkbox" name="nn" value="1" style="margin-top:4px"></div>
-    <div><label>Auto Incr</label><input type="checkbox" name="ai" value="1" style="margin-top:4px"></div>
-    <div><label>Default</label><input type="text" name="default" placeholder="NULL" style="width:100px"></div>
-    <button class="btn btn-ac">Add</button>
-</form>
-
-<h3 id="idxSection">Indexes</h3>
-<?php
-$idxGrouped=[];
-foreach($structIdx as $ix){$idxGrouped[$ix['Key_name']][]=$ix;}
-?>
-<table class="dt"><thead><tr><th>Index</th><th>Unique</th><th>Columns</th><th>Actions</th></tr></thead><tbody>
-<?php foreach($idxGrouped as $iname=>$cols):?>
-<tr>
-    <td><?=eh($iname)?></td>
-    <td><?=($cols[0]['Non_unique']==0?'Yes':'No')?></td>
-    <td><?=eh(implode(', ',array_column($cols,'Column_name')))?></td>
-    <td><?php if($iname!=='PRIMARY'):?><form method="POST" class="inline" onsubmit="return confirm('Drop index?')"><input type="hidden" name="act" value="drop_index"><input type="hidden" name="table" value="<?=eh($tbl)?>"><input type="hidden" name="index" value="<?=eh($iname)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>"><button class="btn btn-er" style="padding:3px 8px;font-size:11px">Drop</button></form><?php else:?>—<?php endif;?></td>
-</tr>
-<?php endforeach;?>
-</tbody></table>
-
-<h3>Add Index</h3>
-<form method="POST" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-    <input type="hidden" name="act" value="add_index"><input type="hidden" name="table" value="<?=eh($tbl)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>">
-    <div><label>Name</label><input type="text" name="iname" required></div>
-    <div><label>Columns</label><select name="icols[]" multiple size="1" style="min-width:150px;height:32px"><?php foreach($structCols as $c):?><option value="<?=eh($c['Field'])?>"><?=eh($c['Field'])?></option><?php endforeach;?></select></div>
-    <div><label>Unique</label><input type="checkbox" name="unique" value="1" style="margin-top:4px"></div>
-    <button class="btn btn-ac">Add</button>
-</form>
-
-<h3 id="createSection">CREATE Statement</h3>
-<div class="code-block"><?=eh($structCreate)?></div>
-
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// VIEW: INSERT ROW
-// ═══════════════════════════════════════════════════════════════════════════
-elseif($act==='insert'&&$tbl&&$curDb):
-?>
-<h2>Insert into <?=eh($tbl)?></h2>
-<form method="POST">
-    <input type="hidden" name="act" value="insert_row"><input type="hidden" name="table" value="<?=eh($tbl)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>">
-    <?php foreach($insertCols as $c):?>
-    <div class="form-row">
-        <label><?=eh($c['Field'])?> 
-        <span style="color:var(--mu)">
-        (
-        <?=eh($c['Type'])?>
-        <?=($c['Null']==='YES'?' · NULL':'')?><?=($c['Extra']?' · '.$c['Extra']:'')?>
-        )
-        </span>
-        </label>
-        <?php if(preg_match('/(blob|binary)/i',$c['Type'])):?>
-            <input type="file" name="file_<?=eh($c['Field'])?>" style="color:var(--tx)"><input type="hidden" name="vals[<?=eh($c['Field'])?>][val]" value="">
-        <?php elseif(preg_match('/(text|json)/i',$c['Type'])):?>
-            <textarea name="vals[<?=eh($c['Field'])?>][val]" rows="3" style="width:100%"></textarea>
-        <?php else:?>
-            <input type="text" name="vals[<?=eh($c['Field'])?>][val]" style="width:100%" placeholder="<?=($c['Default']!==null?'Default: '.$c['Default']:'')?>">
-        <?php endif;?>
-        <?php if($c['Null']==='YES'):?><label style="font-weight:normal;text-transform:none"><input type="checkbox" name="vals[<?=eh($c['Field'])?>][null]" value="1"> Set NULL</label><?php endif;?>
+    <nav id="breadcrumb"></nav>
+    <div class="header-right">
+      <span class="user-badge"><?= htmlspecialchars($username) ?></span>
+      <a href="logout.php" class="btn-logout">Logout</a>
     </div>
-    <?php endforeach;?>
-    <button class="btn btn-ac">Insert Row</button>
-</form>
+  </header>
 
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// VIEW: EDIT ROW
-// ═══════════════════════════════════════════════════════════════════════════
-elseif($act==='edit'&&$tbl&&$curDb&&$editRow):
-?>
-<h2>Edit Row — <?=eh($tbl)?></h2>
-<form method="POST">
-    <input type="hidden" name="act" value="update_row"><input type="hidden" name="table" value="<?=eh($tbl)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>">
-    <?php
-    // rebuild where clause from PK values
-    $whParts=[];
-    foreach($editCols as $c){if($c['Key']==='PRI'){$whParts[]=qi($c['Field'])."='".escSQL($editRow[$c['Field']]??'')."'";}
+  <!-- MAIN -->
+  <div id="main">
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+      <div class="sidebar-head">Esplora</div>
+      <div id="tree-wrap"></div>
+    </aside>
+
+    <div id="resize-handle"></div>
+
+    <!-- CONTENT -->
+    <section id="content">
+      <!-- Toolbar -->
+      <div id="toolbar">
+        <div class="tb-group">
+          <button class="tb" onclick="App.triggerUpload()" title="Carica file">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Carica
+          </button>
+          <button class="tb" onclick="App.newFolder()" title="Nuova cartella">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+            Cartella
+          </button>
+          <button class="tb" onclick="App.newFile()" title="Nuovo file">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+            File
+          </button>
+        </div>
+        <div class="tb-sep"></div>
+        <div class="tb-group">
+          <button class="tb" id="btn-dl" disabled onclick="App.downloadSelected()" title="Download">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download
+          </button>
+          <button class="tb" id="btn-rn" disabled onclick="App.renameSelected()" title="Rinomina">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+            Rinomina
+          </button>
+          <button class="tb danger" id="btn-del" disabled onclick="App.deleteSelected()" title="Elimina">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+            Elimina
+          </button>
+        </div>
+        <div class="tb-sep"></div>
+        <div class="tb-group">
+          <button class="tb" id="btn-zip" disabled onclick="App.createZip()" title="Crea ZIP">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 8v13H3V3h12"/><path d="M15 3v6h6"/><rect x="9" y="13" width="6" height="5" rx="1"/></svg>
+            Crea ZIP
+          </button>
+        </div>
+        <div class="tb-spacer"></div>
+        <div class="tb-group">
+          <button class="tb" onclick="App.refresh()" title="Aggiorna">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Upload progress -->
+      <div id="upload-bar"><div id="upload-fill"></div></div>
+
+      <!-- List Header -->
+      <div id="list-head">
+        <div><input type="checkbox" id="sel-all" onchange="App.toggleAll()"></div>
+        <div></div>
+        <div class="lh-sort" onclick="App.sort('name')">Nome</div>
+        <div class="lh-sort" onclick="App.sort('size')">Dim.</div>
+        <div class="lh-sort" onclick="App.sort('modified')">Data</div>
+        <div>Perms</div>
+      </div>
+
+      <!-- File List -->
+      <div id="file-list">
+        <div class="loading"><div class="spinner"></div>Caricamento...</div>
+      </div>
+
+      <!-- Drop Overlay -->
+      <div id="drop-overlay">
+        <div class="drop-inner">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <p>Rilascia i file qui</p>
+          <span>Verranno caricati nella cartella corrente</span>
+        </div>
+      </div>
+
+      <!-- Status Bar -->
+      <div id="status-bar">
+        <span id="st-count">0 elementi</span>
+        <span id="st-sel"></span>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Hidden file input -->
+<input type="file" id="file-input" multiple style="display:none">
+
+<!-- EDITOR MODAL -->
+<div id="editor-modal" class="modal hidden">
+  <div class="modal-bg" onclick="App.closeEditor()"></div>
+  <div class="modal-box modal-lg">
+    <div class="modal-hd">
+      <h3 id="ed-title">Editor</h3>
+      <button class="modal-close" onclick="App.closeEditor()">&times;</button>
+    </div>
+    <div class="modal-bd">
+      <div id="editor-wrap"><div id="ace-editor"></div></div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="App.closeEditor()">Chiudi</button>
+      <button class="btn btn-primary" onclick="App.saveEditor()">Salva (Ctrl+S)</button>
+    </div>
+  </div>
+</div>
+
+<!-- DIALOG MODAL -->
+<div id="dlg-modal" class="modal hidden">
+  <div class="modal-bg" onclick="App.dlgCancel()"></div>
+  <div class="modal-box modal-sm">
+    <div class="modal-hd">
+      <h3 id="dlg-title">Conferma</h3>
+      <button class="modal-close" onclick="App.dlgCancel()">&times;</button>
+    </div>
+    <div class="modal-bd" style="padding:20px">
+      <p id="dlg-msg"></p>
+      <input type="text" id="dlg-input" style="display:none" autocomplete="off">
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="App.dlgCancel()">Annulla</button>
+      <button class="btn btn-primary" id="dlg-ok" onclick="App.dlgConfirm()">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOASTS -->
+<div id="toasts"></div>
+
+<!-- ACE EDITOR CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.js"></script>
+
+<script>
+/* ==========================================================
+   APPLICATION
+   ========================================================== */
+const App = {
+    rootFolder: '<?= addslashes($rootFolder) ?>',
+    currentPath: '',
+    files: [],
+    selected: new Set(),
+    sortField: 'name',
+    sortAsc: true,
+    textExts: [],
+    aceEditor: null,
+    acePath: null,
+    dlgCb: null,
+    dlgInput: false,
+    sidebarOpen: true,
+
+    /* --------------------------------------------------
+       ICONS (inline SVG)
+       -------------------------------------------------- */
+    I: {
+        folder: '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M2 6c0-1.1.9-2 2-2h5l2 2h9a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" fill="#fbbf24"/></svg>',
+        fileT: '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" fill="#5e9eff"/><path d="M14 2v6h6" fill="#4183d4"/><path d="M8 13h8M8 17h5" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>',
+        file:  '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" fill="#3a4058"/><path d="M14 2v6h6" fill="#2d3348"/></svg>',
+        zip:   '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" fill="#f97316"/><path d="M14 2v6h6" fill="#d95f0c"/></svg>',
+        img:   '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" fill="#a855f7"/><path d="M14 2v6h6" fill="#8b3de8"/><circle cx="10" cy="14" r="2" fill="#fff" opacity=".7"/><path d="M6 20l4-5 3 3 3-4 4 6H6z" fill="#fff" opacity=".5"/></svg>'
+    },
+
+    /* --------------------------------------------------
+       INIT
+       -------------------------------------------------- */
+    async init() {
+        const cfg = await App.api({action:'getConfig'});
+        if (cfg && cfg.textExtensions) App.textExts = cfg.textExtensions;
+        App.currentPath = App.rootFolder;
+        App.initTree();
+        App.initDragDrop();
+        App.initResize();
+        App.initKeys();
+        App.loadDir(App.currentPath);
+        document.getElementById('file-input').addEventListener('change', function(){
+            if (this.files.length) App.upload(this.files);
+            this.value = '';
+        });
+    },
+
+    /* --------------------------------------------------
+       API HELPERS
+       -------------------------------------------------- */
+    async api(params) {
+        try {
+            const qs = new URLSearchParams(params).toString();
+            const r = await fetch('api.php?' + qs);
+            if (r.status === 401) { window.location='index.php'; return null; }
+            const d = await r.json();
+            if (d.error) { App.toast(d.error,'err'); return null; }
+            return d;
+        } catch(e) { App.toast('Errore di rete','err'); return null; }
+    },
+
+    async apiPost(params) {
+        try {
+            const fd = new FormData();
+            for (const k in params) fd.append(k, params[k]);
+            const r = await fetch('api.php', {method:'POST',body:fd});
+            if (r.status === 401) { window.location='index.php'; return null; }
+            const d = await r.json();
+            if (d.error) { App.toast(d.error,'err'); return null; }
+            return d;
+        } catch(e) { App.toast('Errore di rete','err'); return null; }
+    },
+
+    /* --------------------------------------------------
+       TREE
+       -------------------------------------------------- */
+    async initTree() {
+        const wrap = document.getElementById('tree-wrap');
+        const root = App.mkNode({name: App.base(App.rootFolder), path: App.rootFolder, hasChildren: true}, 0);
+        root.classList.add('expanded');
+        wrap.appendChild(root);
+        await App.expandNode(root);
+        App.highlightTree(App.rootFolder);
+    },
+
+    mkNode(item, level) {
+        const node = document.createElement('div');
+        node.className = 'tree-node';
+        node.dataset.path = item.path;
+
+        const row = document.createElement('div');
+        row.className = 'tree-row';
+        row.style.paddingLeft = (8 + level * 16) + 'px';
+
+        const tog = document.createElement('span');
+        tog.className = 'tree-toggle' + (item.hasChildren ? '' : ' no-children');
+        tog.innerHTML = '<svg viewBox="0 0 10 10"><path d="M3 1l4 4-4 4" fill="currentColor"/></svg>';
+        tog.addEventListener('click', e => { e.stopPropagation(); App.toggleNode(node); });
+
+        const ico = document.createElement('span');
+        ico.className = 'tree-icon';
+        ico.innerHTML = App.I.folder;
+
+        const nm = document.createElement('span');
+        nm.className = 'tree-name';
+        nm.textContent = item.name;
+
+        row.appendChild(tog);
+        row.appendChild(ico);
+        row.appendChild(nm);
+        row.addEventListener('click', () => App.selectTree(node));
+        node.appendChild(row);
+
+        const ch = document.createElement('div');
+        ch.className = 'tree-children';
+        node.appendChild(ch);
+        return node;
+    },
+
+    async expandNode(node) {
+        const ch = node.querySelector(':scope > .tree-children');
+        if (ch.dataset.loaded === '1') { node.classList.add('expanded'); return; }
+        const d = await App.api({action:'tree', path:node.dataset.path});
+        if (!d) return;
+        const level = App.treeLevel(node) + 1;
+        d.items.forEach(it => ch.appendChild(App.mkNode(it, level)));
+        ch.dataset.loaded = '1';
+        node.classList.add('expanded');
+    },
+
+    async toggleNode(node) {
+        if (node.classList.contains('expanded')) {
+            node.classList.remove('expanded');
+        } else {
+            await App.expandNode(node);
+        }
+    },
+
+    treeLevel(node) {
+        let n = 0, el = node;
+        while (el.parentElement && el.parentElement.id !== 'tree-wrap') {
+            if (el.parentElement.classList.contains('tree-children')) n++;
+            el = el.parentElement;
+        }
+        return n;
+    },
+
+    selectTree(node) {
+        App.highlightTree(node.dataset.path);
+        App.currentPath = node.dataset.path;
+        App.loadDir(node.dataset.path);
+    },
+
+    highlightTree(path) {
+        document.querySelectorAll('.tree-row.active').forEach(r => r.classList.remove('active'));
+        const n = document.querySelector(`.tree-node[data-path="${CSS.escape(path)}"] > .tree-row`);
+        if (n) n.classList.add('active');
+    },
+
+    async syncTree(path) {
+        const segs = path.replace(App.rootFolder,'').split('/').filter(Boolean);
+        let cur = App.rootFolder;
+        let node = document.querySelector(`.tree-node[data-path="${CSS.escape(cur)}"]`);
+        for (const s of segs) {
+            cur += '/' + s;
+            if (node && !node.classList.contains('expanded')) await App.expandNode(node);
+            const ch = node ? node.querySelector(':scope > .tree-children') : null;
+            node = ch ? ch.querySelector(`.tree-node[data-path="${CSS.escape(cur)}"]`) : null;
+        }
+        if (node) App.highlightTree(path);
+    },
+
+    /* --------------------------------------------------
+       FILE BROWSER
+       -------------------------------------------------- */
+    async loadDir(path) {
+        App.currentPath = path;
+        App.selected.clear();
+        App.updateToolbar();
+        document.getElementById('sel-all').checked = false;
+        document.getElementById('file-list').innerHTML = '<div class="loading"><div class="spinner"></div>Caricamento...</div>';
+        App.updateBreadcrumb();
+        App.syncTree(path);
+
+        const d = await App.api({action:'list', path});
+        if (!d) { document.getElementById('file-list').innerHTML = ''; return; }
+        App.files = d.items;
+        App.renderList();
+    },
+
+    renderList() {
+        const list = document.getElementById('file-list');
+        let items = [...App.files];
+
+        // Sort
+        items.sort((a,b) => {
+            if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+            let c;
+            switch(App.sortField) {
+                case 'size':     c = ((a.size||0)-(b.size||0)); break;
+                case 'modified': c = ((a.modified||0)-(b.modified||0)); break;
+                default:         c = a.name.localeCompare(b.name);
+            }
+            return App.sortAsc ? c : -c;
+        });
+
+        if (!items.length) {
+            list.innerHTML = '<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg><p>Cartella vuota</p></div>';
+            App.updateStatus();
+            return;
+        }
+
+        let html = '';
+        items.forEach((f,i) => {
+            const sel = App.selected.has(f.path) ? ' selected' : '';
+            const icon = f.isDir ? App.I.folder : (f.isText ? App.I.fileT : (['zip','rar','7z','tar','gz','bz2'].includes(f.extension) ? App.I.zip : (['jpg','jpeg','png','gif','bmp','svg','webp','ico','avif'].includes(f.extension) ? App.I.img : App.I.file)));
+            const nmClass = f.isDir ? 'is-dir' : (f.isText ? 'is-text' : '');
+            html += `<div class="fr${sel}" data-idx="${i}" data-path="${App.esc(f.path)}" onclick="App.toggleSel(event,'${App.esc(f.path)}')" ondblclick="App.dblClick(${i})">
+                <div><input type="checkbox" ${App.selected.has(f.path)?'checked':''} onclick="event.stopPropagation();App.toggleSel(event,'${App.esc(f.path)}')"></div>
+                <div class="fr-icon">${icon}</div>
+                <div class="fr-name ${nmClass}" title="${App.esc(f.name)}">${App.esc(f.name)}</div>
+                <div class="fr-size">${f.isDir ? '&mdash;' : App.fmtSize(f.size)}</div>
+                <div class="fr-date">${f.modified ? App.fmtDate(f.modified) : ''}</div>
+                <div class="fr-perm">${f.permissions||''}</div>
+            </div>`;
+        });
+        list.innerHTML = html;
+        App.updateStatus();
+    },
+
+    dblClick(idx) {
+        const f = App.files[idx];
+        if (!f) return;
+        if (f.isDir) {
+            App.loadDir(f.path);
+        } else if (f.isText) {
+            App.openEditor(f.path);
+        } else {
+            App.dlFile(f.path);
+        }
+    },
+
+    toggleSel(e, path) {
+        if (App.selected.has(path)) App.selected.delete(path);
+        else App.selected.add(path);
+        const row = document.querySelector(`.fr[data-path="${CSS.escape(path)}"]`);
+        if (row) {
+            row.classList.toggle('selected', App.selected.has(path));
+            const cb = row.querySelector('input[type=checkbox]');
+            if (cb) cb.checked = App.selected.has(path);
+        }
+        document.getElementById('sel-all').checked = App.selected.size === App.files.length && App.files.length > 0;
+        App.updateToolbar();
+        App.updateStatus();
+    },
+
+    toggleAll() {
+        const all = document.getElementById('sel-all').checked;
+        App.selected.clear();
+        if (all) App.files.forEach(f => App.selected.add(f.path));
+        document.querySelectorAll('.fr').forEach(r => {
+            const p = r.dataset.path;
+            r.classList.toggle('selected', App.selected.has(p));
+            const cb = r.querySelector('input[type=checkbox]');
+            if (cb) cb.checked = App.selected.has(p);
+        });
+        App.updateToolbar();
+        App.updateStatus();
+    },
+
+    updateToolbar() {
+        const n = App.selected.size;
+        document.getElementById('btn-dl').disabled = n === 0;
+        document.getElementById('btn-rn').disabled = n !== 1;
+        document.getElementById('btn-del').disabled = n === 0;
+        document.getElementById('btn-zip').disabled = n < 1;
+    },
+
+    updateStatus() {
+        document.getElementById('st-count').textContent = App.files.length + ' elementi';
+        const n = App.selected.size;
+        document.getElementById('st-sel').textContent = n ? n + ' selezionati' : '';
+    },
+
+    updateBreadcrumb() {
+        const bc = document.getElementById('breadcrumb');
+        const rel = App.currentPath.replace(App.rootFolder, '');
+        const parts = rel.split('/').filter(Boolean);
+        let html = `<span class="crumb${parts.length?'':' active'}" onclick="App.loadDir('${App.esc(App.rootFolder)}')">${App.esc(App.base(App.rootFolder))}</span>`;
+        let bp = App.rootFolder;
+        parts.forEach((p,i) => {
+            bp += '/' + p;
+            const isLast = i === parts.length - 1;
+            html += `<span class="crumb-sep">/</span><span class="crumb${isLast?' active'}" onclick="App.loadDir('${App.esc(bp)}')">${App.esc(p)}</span>`;
+        });
+        bc.innerHTML = html;
+    },
+
+    sort(field) {
+        if (App.sortField === field) App.sortAsc = !App.sortAsc;
+        else { App.sortField = field; App.sortAsc = true; }
+        App.renderList();
+    },
+
+    refresh() { App.loadDir(App.currentPath); },
+
+    /* --------------------------------------------------
+       UPLOAD & DRAG/DROP
+       -------------------------------------------------- */
+    initDragDrop() {
+        const ct = document.getElementById('content');
+        const ov = document.getElementById('drop-overlay');
+        let cnt = 0;
+        ct.addEventListener('dragenter', e => { e.preventDefault(); cnt++; ov.classList.add('show'); });
+        ct.addEventListener('dragleave', e => { e.preventDefault(); cnt--; if(cnt<=0){cnt=0;ov.classList.remove('show');} });
+        ct.addEventListener('dragover', e => e.preventDefault());
+        ct.addEventListener('drop', e => {
+            e.preventDefault(); cnt=0; ov.classList.remove('show');
+            if (e.dataTransfer.files.length) App.upload(e.dataTransfer.files);
+        });
+    },
+
+    triggerUpload() { document.getElementById('file-input').click(); },
+
+    async upload(fileList) {
+        const bar = document.getElementById('upload-bar');
+        const fill = document.getElementById('upload-fill');
+        bar.classList.add('show');
+        fill.style.width = '0%';
+
+        const fd = new FormData();
+        fd.append('action', 'upload');
+        fd.append('path', App.currentPath);
+        for (let i=0; i<fileList.length; i++) fd.append('files[]', fileList[i]);
+
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener('progress', e => {
+            if (e.lengthComputable) fill.style.width = Math.round(e.loaded/e.total*100)+'%';
+        });
+        xhr.addEventListener('load', () => {
+            bar.classList.remove('show');
+            if (xhr.status === 200) {
+                try {
+                    const d = JSON.parse(xhr.responseText);
+                    if (d.error) App.toast(d.error,'err');
+                    else {
+                        const ok = d.results.filter(r=>r.status==='ok').length;
+                        App.toast(ok + ' file caricati','ok');
+                        App.refresh();
+                    }
+                } catch(e) { App.toast('Errore upload','err'); }
+            } else App.toast('Errore upload ('+xhr.status+')','err');
+        });
+        xhr.addEventListener('error', () => { bar.classList.remove('show'); App.toast('Errore di rete','err'); });
+        xhr.open('POST','api.php');
+        xhr.send(fd);
+    },
+
+    /* --------------------------------------------------
+       FILE OPERATIONS
+       -------------------------------------------------- */
+    dlFile(path) {
+        const a = document.createElement('a');
+        a.href = 'api.php?action=download&path='+encodeURIComponent(path);
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    },
+
+    async downloadSelected() {
+        if (App.selected.size === 0) return;
+        if (App.selected.size === 1) {
+            App.dlFile([...App.selected][0]);
+        } else {
+            // Create zip then download
+            App.toast('Creazione ZIP in corso...','info');
+            const d = await App.apiPost({action:'zip', items:JSON.stringify([...App.selected]), basePath:App.currentPath});
+            if (d && d.status==='ok') {
+                const a = document.createElement('a');
+                a.href = 'api.php?action=downloadZip&path='+encodeURIComponent(d.zipPath);
+                a.download = d.zipName;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                App.toast('ZIP scaricato','ok');
+                setTimeout(() => App.refresh(), 500);
+            }
+        }
+    },
+
+    async deleteSelected() {
+        if (!App.selected.size) return;
+        const names = [...App.selected].map(p => App.base(p)).join(', ');
+        App.confirm(`Eliminare ${App.selected.size} elemento/i?<br><br><strong>${App.esc(names)}</strong>`, async () => {
+            let ok = 0;
+            for (const p of App.selected) {
+                const d = await App.apiPost({action:'delete', path:p});
+                if (d && d.status==='ok') ok++;
+            }
+            App.toast(ok + ' eliminati','ok');
+            App.refresh();
+            // Refresh tree
+            document.getElementById('tree-wrap').innerHTML = '';
+            App.initTree();
+        });
+    },
+
+    newFolder() {
+        App.input('Nome nuova cartella:', '', async (name) => {
+            if (!name) return;
+            const d = await App.apiPost({action:'mkdir', path:App.currentPath, name});
+            if (d && d.status==='ok') { App.toast('Cartella creata','ok'); App.refresh(); }
+        });
+    },
+
+    newFile() {
+        App.input('Nome nuovo file:', '', async (name) => {
+            if (!name) return;
+            const d = await App.apiPost({action:'createFile', path:App.currentPath, name});
+            if (d && d.status==='ok') { App.toast('File creato','ok'); App.refresh(); }
+        });
+    },
+
+    renameSelected() {
+        if (App.selected.size !== 1) return;
+        const old = [...App.selected][0];
+        App.input('Nuovo nome:', App.base(old), async (name) => {
+            if (!name || name === App.base(old)) return;
+            const d = await App.apiPost({action:'rename', oldPath:old, newName:name});
+            if (d && d.status==='ok') { App.toast('Rinominato','ok'); App.refresh(); }
+        });
+    },
+
+    async createZip() {
+        if (!App.selected.size) return;
+        App.toast('Creazione ZIP...','info');
+        const d = await App.apiPost({action:'zip', items:JSON.stringify([...App.selected]), basePath:App.currentPath});
+        if (d && d.status==='ok') { App.toast('ZIP creato: '+d.zipName,'ok'); App.refresh(); }
+    },
+
+    /* --------------------------------------------------
+       EDITOR (ACE)
+       -------------------------------------------------- */
+    async openEditor(path) {
+        const d = await App.api({action:'read', path});
+        if (!d) return;
+        document.getElementById('editor-modal').classList.remove('hidden');
+        document.getElementById('ed-title').textContent = d.name;
+        App.acePath = path;
+
+        if (!App.aceEditor) {
+            App.aceEditor = ace.edit('ace-editor');
+            App.aceEditor.setTheme('ace/theme/monokai');
+            App.aceEditor.setOptions({
+                fontSize: '14px',
+                showPrintMargin: false,
+                tabSize: 4,
+                useSoftTabs: true,
+                wrap: false,
+                enableBasicAutocompletion: false
+            });
+            App.aceEditor.commands.addCommand({
+                name: 'save',
+                bindKey: {win:'Ctrl-S', mac:'Command-S'},
+                exec: () => App.saveEditor()
+            });
+        }
+        const mode = App.aceMode(d.extension);
+        App.aceEditor.session.setMode('ace/mode/' + mode);
+        App.aceEditor.setValue(d.content, -1);
+        setTimeout(() => App.aceEditor.resize(), 50);
+        App.aceEditor.focus();
+    },
+
+    async saveEditor() {
+        if (!App.acePath) return;
+        const content = App.aceEditor.getValue();
+        const d = await App.apiPost({action:'save', path:App.acePath, content});
+        if (d && d.status==='ok') App.toast('File salvato','ok');
+    },
+
+    closeEditor() {
+        document.getElementById('editor-modal').classList.add('hidden');
+        App.acePath = null;
+    },
+
+    aceMode(ext) {
+        const m = {
+            js:'javascript',ts:'typescript',jsx:'jsx',tsx:'tsx',php:'php',
+            py:'python',rb:'ruby',java:'java',c:'c_cpp',cpp:'c_cpp',h:'c_cpp',hpp:'c_cpp',
+            css:'css',scss:'scss',less:'less',sass:'scss',
+            html:'html',htm:'html',xml:'xml',svg:'xml',
+            json:'json',md:'markdown',yml:'yaml',yaml:'yaml',
+            sql:'sql',sh:'sh',bash:'sh',zsh:'sh',fish:'sh',
+            ini:'ini',cfg:'ini',conf:'ini',toml:'toml',
+            env:'sh',htaccess:'apache_conf',gitignore:'text',
+            csv:'text',log:'text',txt:'text',lock:'text',
+            go:'golang',rs:'rust',swift:'swift',kt:'kotlin',scala:'scala',
+            vue:'html',svelte:'html',makefile:'makefile',cmake:'text',
+            r:'r',m:'objectivec',mm:'objectivec',pl:'perl',lua:'lua',
+            ex:'elixir',exs:'elixir',erl:'erlang',hs:'haskell',clj:'clojure',cljs:'clojure'
+        };
+        return m[ext] || 'text';
+    },
+
+    /* --------------------------------------------------
+       DIALOG (confirm / input)
+       -------------------------------------------------- */
+    confirm(msg, cb) {
+        document.getElementById('dlg-title').textContent = 'Conferma';
+        document.getElementById('dlg-msg').innerHTML = msg;
+        document.getElementById('dlg-input').style.display = 'none';
+        document.getElementById('dlg-modal').classList.remove('hidden');
+        App.dlgCb = cb;
+        App.dlgInput = false;
+    },
+
+    input(label, def, cb) {
+        document.getElementById('dlg-title').textContent = label;
+        document.getElementById('dlg-msg').textContent = '';
+        const inp = document.getElementById('dlg-input');
+        inp.style.display = 'block';
+        inp.value = def || '';
+        document.getElementById('dlg-modal').classList.remove('hidden');
+        setTimeout(() => inp.focus(), 50);
+        App.dlgCb = cb;
+        App.dlgInput = true;
+    },
+
+    dlgConfirm() {
+        const val = App.dlgInput ? document.getElementById('dlg-input').value : true;
+        document.getElementById('dlg-modal').classList.add('hidden');
+        if (App.dlgCb) App.dlgCb(val);
+        App.dlgCb = null;
+    },
+
+    dlgCancel() {
+        document.getElementById('dlg-modal').classList.add('hidden');
+        App.dlgCb = null;
+    },
+
+    /* --------------------------------------------------
+       TOAST
+       -------------------------------------------------- */
+    toast(msg, type='info') {
+        const c = document.getElementById('toasts');
+        const t = document.createElement('div');
+        t.className = 'toast t-' + type;
+        t.textContent = msg;
+        c.appendChild(t);
+        setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300); }, 3500);
+    },
+
+    /* --------------------------------------------------
+       RESIZE HANDLE
+       -------------------------------------------------- */
+    initResize() {
+        const h = document.getElementById('resize-handle');
+        const sb = document.getElementById('sidebar');
+        let sx, sw;
+        h.addEventListener('mousedown', e => {
+            e.preventDefault();
+            sx = e.clientX; sw = sb.offsetWidth;
+            h.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            const onM = ev => { sb.style.width = Math.max(200, Math.min(500, sw + ev.clientX - sx)) + 'px'; };
+            const onU = () => {
+                document.removeEventListener('mousemove', onM);
+                document.removeEventListener('mouseup', onU);
+                h.classList.remove('active');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            };
+            document.addEventListener('mousemove', onM);
+            document.addEventListener('mouseup', onU);
+        });
+    },
+
+    /* --------------------------------------------------
+       KEYBOARD
+       -------------------------------------------------- */
+    initKeys() {
+        document.addEventListener('keydown', e => {
+            // Close modals on Escape
+            if (e.key === 'Escape') {
+                if (!document.getElementById('editor-modal').classList.contains('hidden')) App.closeEditor();
+                else if (!document.getElementById('dlg-modal').classList.contains('hidden')) App.dlgCancel();
+            }
+            // Delete selected
+            if (e.key === 'Delete' && App.selected.size > 0 && document.getElementById('editor-modal').classList.contains('hidden') && document.getElementById('dlg-modal').classList.contains('hidden')) {
+                App.deleteSelected();
+            }
+            // F2 rename
+            if (e.key === 'F2' && App.selected.size === 1) {
+                e.preventDefault();
+                App.renameSelected();
+            }
+        });
+    },
+
+    /* --------------------------------------------------
+       SIDEBAR TOGGLE
+       -------------------------------------------------- */
+    toggleSidebar() {
+        const sb = document.getElementById('sidebar');
+        App.sidebarOpen = !App.sidebarOpen;
+        sb.classList.toggle('collapsed', !App.sidebarOpen);
+    },
+
+    /* --------------------------------------------------
+       UTILITIES
+       -------------------------------------------------- */
+    esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); },
+    base(p) { return p.split('/').filter(Boolean).pop() || p; },
+    fmtSize(b) {
+        if (b == null || b === 0) return '0 B';
+        const u = ['B','KB','MB','GB','TB'];
+        const i = Math.floor(Math.log(b)/Math.log(1024));
+        return (b/Math.pow(1024,i)).toFixed(i?1:0) + ' ' + u[i];
+    },
+    fmtDate(ts) {
+        const d = new Date(ts * 1000);
+        const pad = n => String(n).padStart(2,'0');
+        return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
-    if(!$whParts)foreach($editCols as $c){$whParts[]=qi($c['Field'])."='".escSQL($editRow[$c['Field']]??'')."'";}
-    ?>
-    <input type="hidden" name="where" value="<?=eh(implode(' AND ',$whParts))?>">
-    <?php foreach($editCols as $c): $v=$editRow[$c['Field']]??'';?>
-    <div class="form-row">
-        <label><?=eh($c['Field'])?> <span style="color:var(--mu)">(<?=eh($c['Type'])?>)</span></label>
-        <?php if(preg_match('/(text|json)/i',$c['Type'])):?>
-            <textarea name="vals[<?=eh($c['Field'])?>][val]" rows="3" style="width:100%"><?=eh($v)?></textarea>
-        <?php elseif(preg_match('/(blob|binary)/i',$c['Type'])):?>
-            <input type="text" name="vals[<?=eh($c['Field'])?>][val]" value="[BLOB - not editable inline]" disabled style="width:100%">
-        <?php else:?>
-            <input type="text" name="vals[<?=eh($c['Field'])?>][val]" value="<?=eh($v)?>" style="width:100%">
-        <?php endif;?>
-        <?php if($c['Null']==='YES'):?><label style="font-weight:normal;text-transform:none"><input type="checkbox" name="vals[<?=eh($c['Field'])?>][null]" value="1"<?=($v===null?' checked':'')?>> NULL</label><?php endif;?>
-    </div>
-    <?php endforeach;?>
-    <button class="btn btn-ac">Save Changes</button>
-    <a href="?act=browse&db=<?=eh($curDb)?>&table=<?=eh($tbl)?>" class="btn btn-ghost" style="margin-left:8px">Cancel</a>
-</form>
+};
 
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// VIEW: VIEWS
-// ═══════════════════════════════════════════════════════════════════════════
-elseif($act==='views'&&$curDb):
-?>
-<h2>Views — <?=eh($curDb)?></h2>
-<table class="dt"><thead><tr><th>View</th><th>Actions</th></tr></thead><tbody>
-<?php foreach($viewList as $v):?>
-<tr>
-    <td><?=eh($v)?></td>
-    <td class="actions-cell">
-        <a href="?act=edit_view&db=<?=eh($curDb)?>&name=<?=eh($v)?>" class="btn btn-ghost">Edit</a>
-        <form method="POST" class="inline" onsubmit="return confirm('Drop view?')"><input type="hidden" name="act" value="drop_view"><input type="hidden" name="name" value="<?=eh($v)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>"><button class="btn btn-er" style="padding:3px 8px;font-size:11px">Drop</button></form>
-    </td>
-</tr>
-<?php endforeach;?>
-<?php if(!$viewList):?><tr><td colspan="2" style="text-align:center;color:var(--mu);padding:20px">No views</td></tr><?php endif;?>
-</tbody></table>
+/* ==========================================================
+   BOOTSTRAP
+   ========================================================== */
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>
+</body>
+</html>
 
-<h3>Create / Edit View</h3>
-<form method="POST">
-    <input type="hidden" name="act" value="create_view"><input type="hidden" name="_csrf" value="<?=csrf()?>">
-    <div class="form-row"><label>Name</label><input type="text" name="name" value="<?=eh($_GET['name']??'')?>" required style="width:300px"></div>
-    <div class="form-row"><label>Definition (AS SELECT ...)</label><textarea name="definition" rows="6" style="width:100%" placeholder="SELECT id, name FROM users WHERE active = 1"><?=eh($viewDef)?></textarea></div>
-    <button class="btn btn-ac">Save View</button>
-</form>
-
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// VIEW: PROCEDURES
-// ═══════════════════════════════════════════════════════════════════════════
-elseif($act==='procedures'&&$curDb):
-?>
-<h2>Stored Procedures — <?=eh($curDb)?></h2>
-<table class="dt"><thead><tr><th>Procedure</th><th>Actions</th></tr></thead><tbody>
-<?php foreach($procList as $p):?>
-<tr>
-    <td><?=eh($p)?></td>
-    <td class="actions-cell">
-        <a href="?act=edit_proc&db=<?=eh($curDb)?>&name=<?=eh($p)?>" class="btn btn-ghost">Edit</a>
-        <form method="POST" class="inline" onsubmit="return confirm('Drop procedure?')"><input type="hidden" name="act" value="drop_proc"><input type="hidden" name="name" value="<?=eh($p)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>"><button class="btn btn-er" style="padding:3px 8px;font-size:11px">Drop</button></form>
-    </td>
-</tr>
-<?php endforeach;?>
-<?php if(!$procList):?><tr><td colspan="2" style="text-align:center;color:var(--mu);padding:20px">No stored procedures</td></tr><?php endif;?>
-</tbody></table>
-
-<h3>Create / Edit Procedure</h3>
-<form method="POST">
-    <input type="hidden" name="act" value="create_proc"><input type="hidden" name="_csrf" value="<?=csrf()?>">
-    <div class="form-row"><label>Name</label><input type="text" name="name" value="<?=eh($_GET['name']??'')?>" required style="width:300px"></div>
-    <div class="form-row"><label>CREATE PROCEDURE Statement</label><textarea name="body" rows="10" style="width:100%"><?=eh($procDef?:'CREATE PROCEDURE `name`(IN param INT)\nBEGIN\n  -- body\nEND') ?></textarea></div>
-    <button class="btn btn-ac">Save Procedure</button>
-</form>
-
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// VIEW: FUNCTIONS
-// ═══════════════════════════════════════════════════════════════════════════
-elseif($act==='functions'&&$curDb):
-?>
-<h2>Functions — <?=eh($curDb)?></h2>
-<table class="dt"><thead><tr><th>Function</th><th>Actions</th></tr></thead><tbody>
-<?php foreach($funcList as $f):?>
-<tr>
-    <td><?=eh($f)?></td>
-    <td class="actions-cell">
-        <a href="?act=edit_func&db=<?=eh($curDb)?>&name=<?=eh($f)?>" class="btn btn-ghost">Edit</a>
-        <form method="POST" class="inline" onsubmit="return confirm('Drop function?')"><input type="hidden" name="act" value="drop_func"><input type="hidden" name="name" value="<?=eh($f)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>"><button class="btn btn-er" style="padding:3px 8px;font-size:11px">Drop</button></form>
-    </td>
-</tr>
-<?php endforeach;?>
-<?php if(!$funcList):?><tr><td colspan="2" style="text-align:center;color:var(--mu);padding:20px">No functions</td></tr><?php endif;?>
-</tbody></table>
-
-<h3>Create / Edit Function</h3>
-<form method="POST">
-    <input type="hidden" name="act" value="create_func"><input type="hidden" name="_csrf" value="<?=csrf()?>">
-    <div class="form-row"><label>Name</label><input type="text" name="name" value="<?=eh($_GET['name']??'')?>" required style="width:300px"></div>
-    <div class="form-row"><label>CREATE FUNCTION Statement</label><textarea name="body" rows="10" style="width:100%"><?=eh($funcDef?:'CREATE FUNCTION `name`(param INT)\nRETURNS INT DETERMINISTIC\nBEGIN\n  -- body\n  RETURN 0;\nEND')?></textarea></div>
-    <button class="btn btn-ac">Save Function</button>
-</form>
-
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// VIEW: SQL QUERY
-// ═══════════════════════════════════════════════════════════════════════════
-elseif($act==='sql'&&$curDb):
-?>
-<h2>SQL Query — <?=eh($curDb)?></h2>
-<form method="POST">
-    <input type="hidden" name="act" value="run_sql"><input type="hidden" name="_csrf" value="<?=csrf()?>">
-    <div class="form-row"><textarea name="sqltext" rows="8" style="width:100%" placeholder="SELECT * FROM table_name WHERE ..." autofocus><?=eh($_POST['sqltext']??'')?></textarea></div>
-    <button class="btn btn-ac">Execute</button>
-    <span style="margin-left:12px;color:var(--mu);font-size:12px">Database: <?=eh($curDb)?></span>
-</form>
-<?php if(isset($sqlErr)):?>
-<div class="alert alert-error"><?=eh($sqlErr)?></div>
-<?php elseif(isset($sqlMsg)):?>
-<div class="alert alert-success"><?=eh($sqlMsg)?></div>
-<?php if($sqlResult!==null&&$sqlCols):?>
-<div style="overflow-x:auto;margin-top:12px">
-<table class="dt"><thead><tr><?php foreach($sqlCols as $c):?><th><?=eh($c)?></th><?php endforeach;?></tr></thead><tbody>
-<?php foreach($sqlResult as $row):?>
-<tr><?php foreach($row as $v):?><td<?=($v===null?' class="null"':'')?>><?=($v===null?'NULL':eh($v))?></td><?php endforeach;?></tr>
-<?php endforeach;?>
-<?php if(!$sqlResult):?><tr><td colspan="<?=count($sqlCols)?>" style="text-align:center;color:var(--mu);padding:16px">Empty result set</td></tr><?php endif;?>
-</tbody></table>
-</div>
-<?php endif; endif;?>
-
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// VIEW: BACKUP
-// ═══════════════════════════════════════════════════════════════════════════
-elseif($act==='backup'&&$curDb):
-?>
-<h2>Backup — <?=eh($curDb)?></h2>
-<form method="POST">
-    <input type="hidden" name="act" value="do_backup"><input type="hidden" name="db" value="<?=eh($curDb)?>"><input type="hidden" name="_csrf" value="<?=csrf()?>">
-    <div class="form-grid">
-        <div><label><input type="checkbox" name="inc_data" value="1" checked> Include Data</label></div>
-        <div><label><input type="checkbox" name="inc_views" value="1" checked> Include Views</label></div>
-        <div><label><input type="checkbox" name="inc_procs" value="1" checked> Include Procedures</label></div>
-        <div><label><input type="checkbox" name="inc_funcs" value="1" checked> Include Functions</label></div>
-        <div><label><input type="checkbox" name="compress" value="1"> Compress (gzip)</label></div>
-    </div>
-    <div style="margin-top:16px"><button class="btn btn-ac">Download Backup</button></div>
-</form>
-
-<h3 style="margin-top:28px">Automated Backup via GET</h3>
-<p style="color:var(--mu);font-size:13px;margin-bottom:8px">To enable automated backups, set <code style="background:var(--s2);padding:2px 6px;border-radius:3px;font-family:var(--fm)">BACKUP_API_KEY</code> at the top of the PHP file, then use:</p>
-<div class="code-block" style="font-size:12px">
-# Full backup (download)
-curl -o backup.sql "<?=eh((isset($_SERVER['HTTPS'])?'https':'http').'://'.$_SERVER['HTTP_HOST'].$_SERVER['SCRIPT_NAME'])?>?auto_backup=1&key=YOUR_KEY&db=<?=eh($curDb)?>&user=<?=eh($me)?>"
-
-# Compressed backup
-curl -o backup.sql.gz "...?auto_backup=1&key=YOUR_KEY&db=<?=eh($curDb)?>&compress=1"
-
-# Save to server directory (requires BACKUP_SAVE_DIR)
-curl "...?auto_backup=1&key=YOUR_KEY&db=<?=eh($curDb)?>&save=1"
-</div>
-<p style="color:var(--mu);font-size:12px;margin-top:8px">Note: For automated backups, set BACKUP_DB_USER and BACKUP_DB_PASS in the script configuration. The <code style="background:var(--s2);padding:2px 6px;border-radius:3px;font-family:var(--fm)">user</code> and <code style="background:var(--s2);padding:2px 6px;border-radius:3px;font-family:var(--fm)">pass</code> GET parameters are also accepted but less secure (visible in server logs).</p>
-
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// VIEW: RESTORE
-// ═══════════════════════════════════════════════════════════════════════════
-elseif($act==='restore'&&$curDb):
-?>
-<h2>Restore — <?=eh($curDb)?></h2>
-<form method="POST" enctype="multipart/form-data">
-    <input type="hidden" name="act" value="restore"><input type="hidden" name="_csrf" value="<?=csrf()?>">
-    <div class="form-row"><label>Upload .sql or .sql.gz file</label><input type="file" name="file" accept=".sql,.gz,.sql.gz" style="color:var(--tx)"></div>
-    <div style="text-align:center;color:var(--mu);margin:12px 0;font-size:12px">— OR paste SQL below —</div>
-    <div class="form-row"><textarea name="sqltext" rows="12" style="width:100%" placeholder="Paste SQL statements here..."></textarea></div>
-    <button class="btn btn-ac">Restore</button>
-</form>
-
-<?php
-// ═══════════════════════════════════════════════════════════════════════════
-// DEFAULT: redirect to databases
-// ═══════════════════════════════════════════════════════════════════════════
-else:
-    redir('?act=databases');
-endif;
-?>
-</main>
-</div>
-</div>
-</body></html>
