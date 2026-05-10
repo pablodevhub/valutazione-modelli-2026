@@ -1,0 +1,4 @@
+/.kilo
+/vendor/
+node_modules/
+.env
