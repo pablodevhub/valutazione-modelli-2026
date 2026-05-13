@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Viewer</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg: #0e1016;
+            --surface: #161a24;
+            --surface-raised: #1c2130;
+            --accent: #e8b94b;
+            --accent-dim: #9a7a2e;
+            --text: #e8e4db;
+            --text-bright: #ffffff;
+            --text-dim: #8a8698;
+            --text-muted: #5a5670;
+            --border: #242838;
+            --divider: #2a2e40;
+            --editor-bg: #131620;
+            --editor-text: #d8d4cb;
+            --editor-cursor: #e8b94b;
+            --editor-gutter: #4a4760;
+            --editor-line-bg: rgba(232, 185, 75, 0.04);
+            --editor-selection: rgba(232, 185, 75, 0.18);
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            overflow: hidden;
+        }
+
+        ::selection { background: rgba(232, 185, 75, 0.35); color: #fff; }
+
+        /* ============ HEADER ============ */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 52px;
+            padding: 0 24px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            user-select: none;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-mark {
+            width: 24px;
+            height: 24px;
+            background: var(--accent);
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Cormorant Garamond', serif;
+            font-weight: 700;
+            font-size: 15px;
+            color: var(--bg);
+        }
+
+        .logo h1 {
+            font-family: 'Cormorant Garamond', serif;
+            font-weight: 600;
+            font-size: 1.2rem;
+            color: var(--text-bright);
+            letter-spacing: 0.01em;
+        }
+
+        .header-info {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--text-muted);
+        }
+
+        /* ============ LAYOUT ============ */
+        .main {
+            display: flex;
+            height: calc(100% - 52px);
+        }
+
+        .panel {
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-editor {
+            flex: 1 1 50%;
+            min-width: 200px;
+            background: var(--editor-bg);
+        }
+
+        .panel-preview {
+            flex: 1 1 50%;
+            min-width: 200px;
+            background: var(--bg);
+        }
+
+        .panel-label {
+            height: 36px;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+            flex-shrink: 0;
+        }
+
+        .panel-label .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        .panel-label .dot.green { background: #4ade80; }
+        .panel-label .dot.amber { background: var(--accent); }
+
+        /* ============ EDITOR ============ */
+        #editor {
+            width: 100%;
+            flex: 1;
+            resize: none;
+            border: none;
+            outline: none;
+            padding: 20px 24px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            line-height: 1.8;
+            color: var(--editor-text);
+            background: var(--editor-bg);
+            tab-size: 2;
+            caret-color: var(--editor-cursor);
+        }
+
+        #editor::placeholder {
+            color: var(--text-muted);
+        }
+
+        #editor::-webkit-scrollbar { width: 7px; }
+        #editor::-webkit-scrollbar-track { background: transparent; }
+        #editor::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+        #editor::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+        /* ============ DIVIDER ============ */
+        .divider {
+            width: 5px;
+            flex-shrink: 0;
+            cursor: col-resize;
+            background: var(--divider);
+            position: relative;
+            transition: background 0.2s ease;
+        }
+
+        .divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 3px;
+            height: 32px;
+            border-radius: 2px;
+            background: var(--text-muted);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .divider:hover,
+        .divider.active {
+            background: var(--accent-dim);
+        }
+
+        .divider:hover::after,
+        .divider.active::after {
+            opacity: 0.7;
+        }
+
+        /* ============ PREVIEW ============ */
+        .preview {
+            padding: 28px 40px;
+            overflow-y: auto;
+            height: 100%;
+            scroll-behavior: smooth;
+        }
+
+        .preview::-webkit-scrollbar { width: 7px; }
+        .preview::-webkit-scrollbar-track { background: transparent; }
+        .preview::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        .preview-content {
+            max-width: 720px;
+            font-family: 'Source Serif 4', Georgia, serif;
+            font-size: 17px;
+            line-height: 1.85;
+            color: var(--text);
+        }
+
+        /* ---- Preview typography ---- */
+        .preview-content h1 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 2.4rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin: 0 0 20px;
+            padding-bottom: 14px;
+            border-bottom: 2px solid var(--accent-dim);
+            line-height: 1.15;
+        }
+
+        .preview-content h2 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: var(--text-bright);
+            margin: 48px 0 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+            line-height: 1.2;
+        }
+
+        .preview-content h3 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.45rem;
+            font-weight: 600;
+            color: var(--text-bright);
+            margin: 36px 0 12px;
+        }
+
+        .preview-content h4, .preview-content h5, .preview-content h6 {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+            margin: 30px 0 10px;
+        }
+
+        .preview-content p {
+            margin: 0 0 20px;
+            color: var(--text);
+        }
+
+        .preview-content a {
+            color: #6db8e8;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(109, 184, 232, 0.35);
+            transition: border-color 0.2s;
+        }
+        .preview-content a:hover { border-bottom-color: #6db8e8; }
+
+        .preview-content strong {
+            color: var(--text-bright);
+            font-weight: 600;
+        }
+
+        .preview-content em { color: #d4c48a; }
+
+        .preview-content blockquote {
+            border-left: 3px solid var(--accent);
+            margin: 28px 0;
+            padding: 6px 0 6px 22px;
+            color: var(--text-dim);
+            font-style: italic;
+        }
+        .preview-content blockquote p:last-child { margin-bottom: 0; }
+
+        .preview-content code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.84em;
+            background: var(--surface-raised);
+            border: 1px solid var(--border);
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #d4c48a;
+        }
+
+        .preview-content pre {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 22px 26px;
+            margin: 26px 0;
+            overflow-x: auto;
+        }
+
+        .preview-content pre code {
+            background: none;
+            border: none;
+            padding: 0;
+            font-size: 0.85rem;
+            line-height: 1.75;
+            color: var(--text);
+            border-radius: 0;
+        }
+
+        .preview-content ul, .preview-content ol {
+            margin: 0 0 20px;
+            padding-left: 28px;
+        }
+
+        .preview-content li { margin: 8px 0; }
+        .preview-content li::marker { color: var(--accent-dim); }
+        .preview-content li > ul, .preview-content li > ol {
+            margin-top: 8px;
+            margin-bottom: 0;
+        }
+
+        .preview-content hr {
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border), var(--accent-dim), var(--border), transparent);
+            margin: 40px 0;
+        }
+
+        .preview-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 26px 0;
+            font-size: 0.92rem;
+        }
+
+        .preview-content thead th {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 2px solid var(--accent-dim);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .preview-content tbody td {
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .preview-content tbody tr:last-child td { border-bottom: none; }
+
+        .preview-content img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .preview-content input[type="checkbox"] {
+            accent-color: var(--accent);
+            margin-right: 6px;
+        }
+
+        /* ---- Code syntax colors in preview ---- */
+        .preview-content pre code .hljs-keyword { color: #c678dd; }
+        .preview-content pre code .hljs-string { color: #98c379; }
+        .preview-content pre code .hljs-number { color: #d19a66; }
+        .preview-content pre code .hljs-function { color: #61afef; }
+        .preview-content pre code .hljs-title { color: #61afef; }
+        .preview-content pre code .hljs-params { color: #abb2bf; }
+        .preview-content pre code .hljs-comment { color: #5a5670; font-style: italic; }
+        .preview-content pre code .hljs-built_in { color: #e5c07b; }
+        .preview-content pre code .hljs-attr { color: #d19a66; }
+        .preview-content pre code .hljs-literal { color: #d19a66; }
+
+        /* ============ RESPONSIVE ============ */
+        @media (max-width: 768px) {
+            .main { flex-direction: column; }
+            .panel-editor, .panel-preview {
+                flex: 1 1 50%;
+                min-width: unset;
+                min-height: 140px;
+            }
+            .divider {
+                width: 100%;
+                height: 5px;
+                cursor: row-resize;
+            }
+            .preview { padding: 20px 18px; }
+            .header-info { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="logo">
+            <div class="logo-mark">M</div>
+            <h1>Markdown Viewer</h1>
+        </div>
+        <span class="header-info">Editor &middot; Preview</span>
+    </div>
+
+    <div class="main">
+        <div class="panel panel-editor" id="editorPanel">
+            <div class="panel-label">
+                <span class="dot green"></span> Editor
+            </div>
+            <textarea id="editor" spellcheck="false" placeholder="Scrivi il tuo markdown qui..."></textarea>
+        </div>
+
+        <div class="divider" id="divider"></div>
+
+        <div class="panel panel-preview" id="previewPanel">
+            <div class="panel-label">
+                <span class="dot amber"></span> Preview
+            </div>
+            <div class="preview" id="preview">
+                <div class="preview-content" id="previewContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <script>
+        /* ---- Elements ---- */
+        const editor = document.getElementById('editor');
+        const previewEl = document.getElementById('previewContent');
+        const previewScroll = document.getElementById('preview');
+        const divider = document.getElementById('divider');
+        const editorPanel = document.getElementById('editorPanel');
+        const previewPanel = document.getElementById('previewPanel');
+        const mainEl = document.querySelector('.main');
+
+        /* ---- Marked config ---- */
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            highlight: function (code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    return hljs.highlight(code, { language: lang }).value;
+                }
+                return hljs.highlightAuto(code).value;
+            }
+        });
+
+        /* ---- Default content ---- */
+        const sample = `# Benvenuto in Markdown Viewer
+
+Un editor markdown con anteprima in tempo reale.
+
+## Formattazione del testo
+
+Puoi scrivere testo in **grassetto**, in *corsivo*, in ***entrambi***, oppure ~~barrato~~.
+
+## Liste
+
+### Lista non ordinata
+
+- Primo elemento
+- Secondo elemento
+  - Sotto-elemento
+  - Altro sotto-elemento
+- Terzo elemento
+
+### Lista ordinata
+
+1. Analizza il problema
+2. Scrivi la soluzione
+3. Testa e refattorizza
+
+### Lista con checkbox
+
+- [x] Editor con testo leggibile
+- [x] Anteprima in tempo reale
+- [ ] Aggiungere export PDF
+
+## Citazioni
+
+> "La semplicità è la sofisticazione suprema."
+>
+> — Leonardo da Vinci
+
+## Codice
+
+Codice inline: \`const x = 42;\`
+
+\`\`\`javascript
+function fibonacci(n) {
+  if (n <= 1) return n;
+  return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+for (let i = 0; i < 10; i++) {
+  console.log(\`F(\${i}) = \${fibonacci(i)}\`);
+}
+\`\`\`
+
+\`\`\`python
+def quicksort(arr):
+    if len(arr) <= 1:
+        return arr
+    pivot = arr[len(arr) // 2]
+    left = [x for x in arr if x < pivot]
+    middle = [x for x in arr if x == pivot]
+    right = [x for x in arr if x > pivot]
+    return quicksort(left) + middle + quicksort(right)
+\`\`\`
+
+## Tabelle
+
+| Tecnologia | Ruolo | Complessità |
+|-----------|-------|:-----------:|
+| Marked.js | Parsing | Media |
+| Highlight.js | Colorazione | Bassa |
+| Vanilla JS | Interazione | Minima |
+
+## Link
+
+Visita [GitHub](https://github.com) per esplorare.
+
+---
+
+*Modifica il testo a sinistra — l'anteprima si aggiorna in tempo reale.*
+`;
+
+        editor.value = sample;
+
+        /* ---- Render ---- */
+        function renderPreview() {
+            previewEl.innerHTML = marked.parse(editor.value);
+        }
+
+        editor.addEventListener('input', renderPreview);
+        renderPreview();
+
+        /* ---- Sync scroll ---- */
+        editor.addEventListener('scroll', function () {
+            const ratio = editor.scrollTop / (editor.scrollHeight - editor.clientHeight);
+            previewScroll.scrollTop = ratio * (previewScroll.scrollHeight - previewScroll.clientHeight);
+        });
+
+        /* ---- Tab support ---- */
+        editor.addEventListener('keydown', function (e) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                this.value = this.value.substring(0, start) + '  ' + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + 2;
+                renderPreview();
+            }
+        });
+
+        /* ---- Draggable divider ---- */
+        let dragging = false;
+
+        divider.addEventListener('mousedown', function (e) {
+            dragging = true;
+            divider.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', function (e) {
+            if (!dragging) return;
+            const rect = mainEl.getBoundingClientRect();
+            const pct = ((e.clientX - rect.left) / rect.width) * 100;
+            if (pct > 20 && pct < 80) {
+                editorPanel.style.flex = 'none';
+                editorPanel.style.width = pct + '%';
+                previewPanel.style.flex = '1';
+            }
+        });
+
+        document.addEventListener('mouseup', function () {
+            if (!dragging) return;
+            dragging = false;
+            divider.classList.remove('active');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        });
+
+        /* ---- Touch divider ---- */
+        divider.addEventListener('touchstart', function (e) {
+            dragging = true;
+            divider.classList.add('active');
+            e.preventDefault();
+        }, { passive: false });
+
+        document.addEventListener('touchmove', function (e) {
+            if (!dragging) return;
+            const touch = e.touches[0];
+            const rect = mainEl.getBoundingClientRect();
+            const pct = ((touch.clientX - rect.left) / rect.width) * 100;
+            if (pct > 20 && pct < 80) {
+                editorPanel.style.flex = 'none';
+                editorPanel.style.width = pct + '%';
+                previewPanel.style.flex = '1';
+            }
+        }, { passive: true });
+
+        document.addEventListener('touchend', function () {
+            if (!dragging) return;
+            dragging = false;
+            divider.classList.remove('active');
+        });
+    </script>
+</body>
+</html>

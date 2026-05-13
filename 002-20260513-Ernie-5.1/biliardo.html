@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎱 Biliardo 2D</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0f0f23;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+canvas {
+  border: 6px solid #5c3317;
+  border-radius: 10px;
+  cursor: crosshair;
+  box-shadow: 0 0 40px rgba(0,0,0,0.7), inset 0 0 60px rgba(0,0,0,0.3);
+}
+.panel {
+  display: flex;
+  gap: 25px;
+  margin-top: 14px;
+  align-items: center;
+  color: #ccc;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.ctrl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.05);
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.ctrl label {
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-weight: 600;
+}
+input[type="range"] { width: 140px; accent-color: #e94560; }
+.val { font-size: 14px; color: #e94560; font-weight: bold; }
+.spin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 4px;
+  width: 90px;
+  height: 70px;
+}
+.spin-btn {
+  border: 2px solid #555;
+  background: #222;
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.spin-btn:hover { border-color: #888; background: #333; }
+.spin-btn.active {
+  background: #e94560;
+  border-color: #e94560;
+  box-shadow: 0 0 10px rgba(233,69,96,0.5);
+  transform: scale(1.05);
+}
+.spin-btn.empty { visibility: hidden; }
+#info { color: #666; font-size: 12px; margin-top: 8px; letter-spacing: 0.5px; }
+.pocketed { color: #4CAF50; font-weight: bold; margin-left: 10px; }
+</style>
+</head>
+<body>
+<canvas id="table"></canvas>
+<div class="panel">
+  <div class="ctrl">
+    <label>🎯 Potenza</label>
+    <input type="range" id="power" min="5" max="100" value="50">
+    <span class="val" id="powerVal">50%</span>
+  </div>
+  <div class="ctrl">
+    <label>🌀 Effetto</label>
+    <div class="spin-grid">
+      <div class="spin-btn empty"></div>
+      <button class="spin-btn" data-s="top" title="Topspin">⬆</button>
+      <div class="spin-btn empty"></div>
+      <button class="spin-btn" data-s="left" title="Sinistra">⬅</button>
+      <div class="spin-btn" data-s="center" title="Nessuno">•</button>
+      <button class="spin-btn" data-s="right" title="Destra">➡</button>
+      <div class="spin-btn empty"></div>
+      <button class="spin-btn" data-s="back" title="Retro">⬇</button>
+      <div class="spin-btn empty"></div>
+    </div>
+  </div>
+  <div class="ctrl">
+    <label>🔄 Reset</label>
+    <button onclick="resetGame()" style="padding:8px 20px;background:#e94560;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:bold;">Nuova Partita</button>
+  </div>
+  <span class="pocketed" id="pocketedList"></span>
+</div>
+<div id="info">🖱️ Clicca e trascina per mirare e tirare &nbsp;|&nbsp; R = Reset &nbsp;|&nbsp; Spin: ⬆ Top ⬇ Retro ⬅⬇ Effetti laterali</div>
+
+<script>
+const canvas = document.getElementById('table');
+const ctx = canvas.getContext('2d');
+
+const W = 960, H = 500;
+canvas.width = W;
+canvas.height = H;
+
+const BR = 11, PR = 22;
+const FRIC = 0.986, SFRIC = 0.965;
+const MINV = 0.12;
+
+let balls = [], cue, pBalls = [];
+let drag = false, sx, sy, ex, ey;
+let mx = 0, my = 0;
+let pwr = 50, spin = null;
+let moving = false;
+
+const pockets = [
+  {x:22,y:22},{x:W/2,y:12},{x:W-22,y:22},
+  {x:22,y:H-22},{x:W/2,y:H-12},{x:W-22,y:H-22}
+];
+
+const COLS = ['#FFD700','#0050FF','#FF2020','#6B0080','#FF8C00','#008000','#8B0000','#111',
+              '#FFD700','#0050FF','#FF2020','#6B0080','#FF8C00','#008000','#8B0000'];
+
+function resetGame() {
+  balls = []; pBalls = []; moving = false;
+  cue = {x:W*0.25, y:H/2, vx:0, vy:0, sx:0, sy:0, r:BR, c:'#fff', n:0};
+  balls.push(cue);
+  let idx = 0, ax = W*0.7, ay = H/2;
+  for(let r=0;r<5;r++) for(let c=0;c<=r;c++) {
+    if(idx>=15)break;
+    balls.push({x:ax+r*(BR*2+1.5), y:ay+(c-r/2)*(BR*2+1.5), vx:0,vy:0,sx:0,sy:0,r:BR,c:COLS[idx],n:idx+1});
+    idx++;
+  }
+  updatePocketed();
+}
+
+function updatePocketed() {
+  let s = pBalls.map(n=>n).sort((a,b)=>a-b).join(', ');
+  document.getElementById('pocketedList').textContent = s ? '🕳️ '+s : '';
+}
+
+// Input
+canvas.addEventListener('mousedown', e=>{
+  if(moving)return;
+  let r=canvas.getBoundingClientRect();
+  mx=(e.clientX-r.left)*(W/r.width); my=(e.clientY-r.top)*(H/r.height);
+  drag=true; sx=mx; sy=my; ex=mx; ey=my;
+});
+canvas.addEventListener('mousemove', e=>{
+  let r=canvas.getBoundingClientRect();
+  mx=(e.clientX-r.left)*(W/r.width); my=(e.clientY-r.top)*(H/r.height);
+  if(drag){ex=mx;ey=my;}
+});
+canvas.addEventListener('mouseup', ()=>{
+  if(drag&&!moving){shoot();}
+  drag=false;
+});
+
+document.getElementById('power').addEventListener('input',e=>{
+  pwr=+e.target.value;
+  document.getElementById('powerVal').textContent=pwr+'%';
+});
+
+document.querySelectorAll('.spin-btn[data-s]').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.spin-btn').forEach(x=>x.classList.remove('active'));
+    if(spin===b.dataset.s){spin=null;}
+    else{spin=b.dataset.s; b.classList.add('active');}
+  });
+});
+
+document.addEventListener('keydown',e=>{if(e.key==='r'||e.key==='R')resetGame();});
+
+function shoot() {
+  let dx=sx-ex, dy=sy-ey, d=Math.sqrt(dx*dx+dy*dy);
+  if(d<8)return;
+  let ang=Math.atan2(dy,dx), f=pwr/100*22;
+  cue.vx=Math.cos(ang)*f; cue.vy=Math.sin(ang)*f;
+  cue.sx=0; cue.sy=0;
+  if(spin==='top'){cue.sy=-f*0.45;}
+  else if(spin==='back'){cue.sy=f*0.45;}
+  else if(spin==='left'){cue.sx=-f*0.45;}
+  else if(spin==='right'){cue.sx=f*0.45;}
+  moving=true;
+}
+
+function collideBalls() {
+  for(let i=0;i<balls.length;i++){
+    for(let j=i+1;j<balls.length;j++){
+      let a=balls[i],b=balls[j];
+      let dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy),md=a.r+b.r;
+      if(d<md&&d>0){
+        let nx=dx/d,ny=dy/d;
+        let dvx=a.vx-b.vx,dvy=a.vy-b.vy;
+        let dvn=dvx*nx+dvy*ny;
+        if(dvn>0){
+          let imp=dvn*0.92;
+          a.vx-=imp*nx; a.vy-=imp*ny;
+          b.vx+=imp*nx; b.vy+=imp*ny;
+          // spin transfer
+          let tsx=(a.sx+b.sx)*0.3, tsy=(a.sy+b.sy)*0.3;
+          a.sx-=tsx; a.sy-=tsy; b.sx+=tsx; b.sy+=tsy;
+        }
+        let ov=md-d;
+        a.x-=ov*nx/2; a.y-=ov*ny/2;
+        b.x+=ov*nx/2; b.y+=ov*ny/2;
+      }
+    }
+  }
+}
+
+function update() {
+  if(!moving)return;
+  let all=true;
+  for(let b of balls){
+    // spin -> velocity
+    b.vx+=b.sx*0.03; b.vy+=b.sy*0.03;
+    // friction
+    b.vx*=FRIC; b.vy*=FRIC;
+    b.sx*=SFRIC; b.sy*=SFRIC;
+    // move
+    b.x+=b.vx; b.y+=b.vy;
+    // cushions
+    if(b.x-b.r<28){b.x=b.r+28;b.vx=Math.abs(b.vx)*0.75;b.sy*=-0.4;}
+    if(b.x+b.r>W-28){b.x=W-28-b.r;b.vx=-Math.abs(b.vx)*0.75;b.sy*=-0.4;}
+    if(b.y-b.r<28){b.y=b.r+28;b.vy=Math.abs(b.vy)*0.75;b.sx*=-0.4;}
+    if(b.y+b.r>H-28){b.y=H-28-b.r;b.vy=-Math.abs(b.vy)*0.75;b.sx*=-0.4;}
+    if(Math.abs(b.vx)>MINV||Math.abs(b.vy)>MINV)all=false;
+    if(Math.abs(b.sx)>0.05||Math.abs(b.sy)>0.05)all=false;
+    // pockets
+    for(let p of pockets){
+      let d=Math.sqrt((b.x-p.x)**2+(b.y-p.y)**2);
+      if(d<PR){
+        let idx=balls.indexOf(b);
+        if(idx>-1){balls.splice(idx,1);pBalls.push(b.n);updatePocketed();}
+        break;
+      }
+    }
+  }
+  collideBalls();
+  moving=!all;
+}
+
+function draw() {
+  // felt
+  ctx.fillStyle='#0a6e0a';
+  ctx.fillRect(0,0,W,H);
+  // cushions
+  ctx.fillStyle='#2d1a0e';
+  ctx.fillRect(0,0,W,28); ctx.fillRect(0,H-28,W,28);
+  ctx.fillRect(0,0,28,H); ctx.fillRect(W-28,0,28,H);
+  // cushion inner line
+  ctx.strokeStyle='#1a5c1a';
+  ctx.lineWidth=2;
+  ctx.strokeRect(30,30,W-60,H-60);
+  // pockets
+  for(let p of pockets){
+    ctx.fillStyle='#0a0a0a';
+    ctx.beginPath();ctx.arc(p.x,p.y,PR,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#1a1a1a';
+    ctx.beginPath();ctx.arc(p.x,p.y,PR-4,0,Math.PI*2);ctx.fill();
+  }
+  // balls
+  for(let b of balls){
+    // shadow
+    ctx.fillStyle='rgba(0,0,0,0.3)';
+    ctx.beginPath();ctx.arc(b.x+2,b.y+2,b.r,0,Math.PI*2);ctx.fill();
+    // ball
+    let grd=ctx.createRadialGradient(b.x-3,b.y-3,2,b.x,b.y,b.r);
+    grd.addColorStop(0,'#fff'); grd.addColorStop(0.4,b.c); grd.addColorStop(1,shade(b.c,-40));
+    ctx.fillStyle=grd;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.3)';ctx.lineWidth=1;ctx.stroke();
+    // number
+    if(b.n>0){
+      ctx.fillStyle='#fff';ctx.font='bold 10px Arial';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(b.n,b.x,b.y);
+    }
+  }
+  // cue stick + aim
+  if(drag&&!moving){
+    let ang=Math.atan2(sy-ey,sx-ex);
+    let d=Math.sqrt((sx-ex)**2+(sy-ey)**2);
+    let powerPct=Math.min(d/160,1);
+    // aim line
+    ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=1;ctx.setLineDash([6,6]);
+    ctx.beginPath();ctx.moveTo(cue.x,cue.y);
+    ctx.lineTo(cue.x+Math.cos(ang)*400,cue.y+Math.sin(ang)*400);ctx.stroke();
+    ctx.setLineDash([]);
+    // cue
+    ctx.save();ctx.translate(cue.x,cue.y);ctx.rotate(ang+Math.PI);
+    let cLen=180+powerPct*60;
+    // back
+    ctx.strokeStyle='#5c3a1e';ctx.lineWidth=8;ctx.beginPath();
+    ctx.moveTo(BR+8,0);ctx.lineTo(BR+8+cLen*0.6,0);ctx.stroke();
+    // shaft
+    ctx.strokeStyle='#d4a853';ctx.lineWidth=5;ctx.beginPath();
+    ctx.moveTo(BR+8,0);ctx.lineTo(BR+8+cLen*0.85,0);ctx.stroke();
+    // tip
+    ctx.strokeStyle='#4a90d9';ctx.lineWidth=4;ctx.beginPath();
+    ctx.moveTo(BR+4,0);ctx.lineTo(BR+8,0);ctx.stroke();
+    ctx.restore();
+    // power bar
+    ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(15,H-40,160,16);
+    let barCol = powerPct<0.5?'#4CAF50':powerPct<0.8?'#FFC107':'#e94560';
+    ctx.fillStyle=barCol;ctx.fillRect(15,H-40,160*powerPct,16);
+    ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.strokeRect(15,H-40,160,16);
+    ctx.fillStyle='#fff';ctx.font='11px Arial';ctx.textAlign='center';
+    ctx.fillText(pwr+'%',95,H-28);
+  }
+  // instructions overlay
+  if(!moving&&balls.length<=1){
+    ctx.fillStyle='rgba(255,255,255,0.7)';ctx.font='bold 18px Arial';ctx.textAlign='center';
+    ctx.fillText('Clicca e trascina per mirare, poi rilascia per tirare!',W/2,H/2+60);
+  }
+}
+
+function shade(c,amt){
+  let n=parseInt(c.slice(1),16);
+  let r=Math.max(0,Math.min(255,(n>>16)+amt));
+  let g=Math.max(0,Math.min(255,((n>>8)&0xFF)+amt));
+  let b=Math.max(0,Math.min(255,(n&0xFF)+amt));
+  return `rgb(${r},${g},${b})`;
+}
+
+function loop(){update();draw();requestAnimationFrame(loop);}
+resetGame();
+loop();
+</script>
+</body>
+</html>

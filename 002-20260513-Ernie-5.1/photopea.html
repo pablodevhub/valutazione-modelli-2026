@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mini Photopea</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #1e1e2e; color: #cdd6f4; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+
+/* TOOLBAR */
+#toolbar { background: #313244; padding: 8px 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; border-bottom: 2px solid #45475a; z-index: 100; }
+#toolbar button, #toolbar label { background: #45475a; color: #cdd6f4; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+#toolbar button:hover, #toolbar label:hover { background: #585b70; }
+#toolbar button.active { background: #89b4fa; color: #1e1e2e; font-weight: bold; }
+#toolbar .sep { width: 1px; height: 28px; background: #585b70; margin: 0 4px; }
+#toolbar input[type=file] { display: none; }
+#toolbar select { background: #45475a; color: #cdd6f4; border: none; padding: 7px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+#toolbar span { font-size: 12px; color: #a6adc8; margin-left: auto; }
+
+/* CANVAS AREA */
+#canvas-wrapper { flex: 1; overflow: hidden; position: relative; background: #181825; display: flex; align-items: center; justify-content: center; }
+#canvas-container { position: relative; transform-origin: center center; cursor: grab; }
+#canvas-container.grabbing { cursor: grabbing; }
+#canvas-container.cropping { cursor: crosshair; }
+#mainCanvas { display: block; box-shadow: 0 0 40px rgba(0,0,0,0.5); }
+#cropOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* CROP SELECTION */
+#cropRect { position: absolute; border: 2px dashed #89b4fa; background: rgba(137,180,250,0.15); pointer-events: none; display: none; }
+
+/* FILTER SLIDERS PANEL */
+#filterPanel { position: absolute; top: 10px; right: 10px; background: #313244cc; backdrop-filter: blur(10px); padding: 15px; border-radius: 12px; width: 220px; display: none; z-index: 50; }
+#filterPanel h3 { font-size: 14px; margin-bottom: 12px; color: #89b4fa; }
+#filterPanel .slider-group { margin-bottom: 10px; }
+#filterPanel label { font-size: 12px; color: #a6adc8; display: block; margin-bottom: 4px; }
+#filterPanel input[type=range] { width: 100%; accent-color: #89b4fa; }
+#filterPanel .val { float: right; font-size: 12px; color: #cdd6f4; }
+#filterPanel button { width: 100%; margin-top: 8px; background: #45475a; color: #cdd6f4; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+#filterPanel button:hover { background: #585b70; }
+
+/* ZOOM DISPLAY */
+#zoomDisplay { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); background: #313244cc; backdrop-filter: blur(10px); padding: 6px 16px; border-radius: 20px; font-size: 13px; z-index: 50; }
+
+/* DROP ZONE */
+#dropZone { position: absolute; inset: 0; background: rgba(30,30,46,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; transition: opacity 0.3s; }
+#dropZone.hidden { opacity: 0; pointer-events: none; }
+#dropZone h1 { font-size: 48px; margin-bottom: 10px; background: linear-gradient(135deg, #89b4fa, #cba6f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+#dropZone p { color: #a6adc8; font-size: 18px; margin-bottom: 30px; }
+#dropZone .upload-btn { background: #89b4fa; color: #1e1e2e; border: none; padding: 14px 40px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; transition: transform 0.2s; }
+#dropZone .upload-btn:hover { transform: scale(1.05); }
+
+/* NOTIFICATION */
+#notification { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px); background: #a6e3a1; color: #1e1e2e; padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: bold; z-index: 300; transition: transform 0.3s; }
+#notification.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- DROP ZONE -->
+<div id="dropZone">
+  <h1>🖼️ Mini Photopea</h1>
+  <p>Trascina un'immagine qui o clicca per aprire</p>
+  <label class="upload-btn">📂 Apri File</label>
+  <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp">
+</div>
+
+<!-- TOOLBAR -->
+<div id="toolbar">
+  <label>📂 Apri</label>
+  <input type="file" id="fileInput2" accept="image/png,image/jpeg,image/webp">
+  <div class="sep"></div>
+  <button id="btnUndo" title="Undo (Ctrl+Z)">↩ Undo</button>
+  <button id="btnRedo" title="Redo (Ctrl+Y)">↪ Redo</button>
+  <div class="sep"></div>
+  <button id="btnMove" class="active" title="Muovi/Pan">'ovi</button>
+  <button id="btnCrop" title="Ritaglia">🔲 Crop</button>
+  <div class="sep"></div>
+  <button id="btnZoomIn" title="Zoom In">🔍+</button>
+  <span id="zoomLevel">100%</span>
+  <button id="btnZoomOut" title="Zoom Out">🔍−</button>
+  <button id="btnFit" title="Adatta">"</button>
+  <div class="sep"></div>
+  <button id="btnFilters" title="Filtri">🎨 Filtri</button>
+  <div class="sep"></div>
+  <button id="btnSavePNG" title="Salva PNG">💾 PNG</button>
+  <button id="btnSaveJPG" title="Salva JPG">💾 JPG</button>
+  <button id="btnSaveWebP" title="Salva WebP">💾 WebP</button>
+  <span id="imgInfo">Nessuna immagine</span>
+</div>
+
+<!-- CANVAS -->
+<div id="canvas-wrapper">
+  <div id="canvas-container">
+    <canvas id="mainCanvas"></canvas>
+    <canvas id="cropOverlay"></canvas>
+    <div id="cropRect"></div>
+  </div>
+</div>
+
+<!-- FILTER PANEL -->
+<div id="filterPanel">
+  <h3>🎨 Filtri</h3>
+  <div class="slider-group">
+    <label>Luminosità <span class="val" id="brightVal">0</span></label>
+    <input type="range" id="brightness" min="-100" max="100" value="0">
+  </div>
+  <div class="slider-group">
+    <label>Contrasto <span class="val" id="contrastVal">0</span></label>
+    <input type="range" id="contrast" min="-100" max="100" value="0">
+  </div>
+  <div class="slider-group">
+    <label>Saturazione <span class="val" id="saturateVal">0</span></label>
+    <input type="range" id="saturate" min="-100" max="100" value="0">
+  </div>
+  <div class="slider-group">
+    <label>Sfocatura <span class="val" id="blurVal">0</span></label>
+    <input type="range" id="blur" min="0" max="20" value="0">
+  </div>
+  <div class="slider-group">
+    <label>Sepia <span class="val" id="sepiaVal">0</span></label>
+    <input type="range" id="sepia" min="0" max="100" value="0">
+  </div>
+  <div class="slider-group">
+    <label>Grayscale <span class="val" id="grayVal">0</span></label>
+    <input type="range" id="grayscale" min="0" max="100" value="0">
+  </div>
+  <div class="slider-group">
+    <label>Inverti <span class="val" id="invertVal">0</span></label>
+    <input type="range" id="invert" min="0" max="100" value="0">
+  </div>
+  <button id="btnApplyFilters">✅ Applica Filtri</button>
+  <button id="btnResetFilters" style="background:#f38ba8;color:#1e1e2e;">🔄 Reset Filtri</button>
+</div>
+
+<!-- ZOOM DISPLAY -->
+<div id="zoomDisplay">100%</div>
+
+<!-- NOTIFICATION -->
+<div id="notification"></div>
+
+<script>
+// ============ STATE ============
+const canvas = document.getElementById('mainCanvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('cropOverlay');
+const octx = overlay.getContext('2d');
+const container = document.getElementById('canvas-container');
+const cropRect = document.getElementById('cropRect');
+
+let originalImage = null;
+let currentImage = null;
+let zoom = 1;
+let panX = 0, panY = 0;
+let isPanning = false;
+let panStartX, panStartY;
+let tool = 'move';
+let history = [];
+let historyIndex = -1;
+const MAX_HISTORY = 50;
+
+// Crop state
+let isCropping = false;
+let cropStartX, cropStartY, cropEndX, cropEndY;
+let cropActive = false;
+
+// Filter state
+let filters = { brightness:0, contrast:0, saturate:0, blur:0, sepia:0, grayscale:0, invert:0 };
+
+// ============ FILE OPENING ============
+function openFile(file) {
+  if (!file.type.match(/image\/(png|jpeg|webp)/)) { notify('Formato non supportato!', true); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      originalImage = img;
+      canvas.width = img.width;
+      canvas.height = img.height;
+      overlay.width = img.width;
+      overlay.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      currentImage = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      saveHistory();
+      fitToScreen();
+      document.getElementById('dropZone').classList.add('hidden');
+      document.getElementById('imgInfo').textContent = `${img.width}×${img.height} | ${file.name}`;
+      notify('Immagine caricata!');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+document.getElementById('fileInput').addEventListener('change', e => { if(e.target.files[0]) openFile(e.target.files[0]); });
+document.getElementById('fileInput2').addEventListener('change', e => { if(e.target.files[0]) openFile(e.target.files[0]); });
+document.querySelector('#dropZone .upload-btn').addEventListener('click', () => document.getElementById('fileInput').click());
+
+// Drag & Drop
+const dropZone = document.getElementById('dropZone');
+document.body.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.opacity = '1'; });
+document.body.addEventListener('dragleave', e => { if(e.relatedTarget === null) dropZone.style.opacity = ''; });
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.style.opacity = '';
+  if(e.dataTransfer.files[0]) openFile(e.dataTransfer.files[0]);
+});
+
+// ============ ZOOM & PAN ============
+function updateTransform() {
+  container.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
+  document.getElementById('zoomDisplay').textContent = Math.round(zoom * 100) + '%';
+}
+
+function fitToScreen() {
+  const wrapper = document.getElementById('canvas-wrapper');
+  const maxW = wrapper.clientWidth - 40;
+  const maxH = wrapper.clientHeight - 40;
+  zoom = Math.min(maxW / canvas.width, maxH / canvas.height, 1);
+  panX = (wrapper.clientWidth - canvas.width * zoom) / 2;
+  panY = (wrapper.clientHeight - canvas.height * zoom) / 2;
+  updateTransform();
+}
+
+document.getElementById('btnZoomIn').addEventListener('click', () => { zoom = Math.min(zoom * 1.2, 10); updateTransform(); });
+document.getElementById('btnZoomOut').addEventListener('click', () => { zoom = Math.max(zoom / 1.2, 0.05); updateTransform(); });
+document.getElementById('btnFit').addEventListener('click', fitToScreen);
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) / zoom;
+  const my = (e.clientY - rect.top) / zoom;
+  const factor = e.deltaY < 0 ? 1.1 : 0.9;
+  const newZoom = Math.max(0.05, Math.min(10, zoom * factor));
+  panX = e.clientX - rect.left - mx * newZoom;
+  panY = e.clientY - rect.top - my * newZoom;
+  zoom = newZoom;
+  updateTransform();
+}, { passive: false });
+
+// Pan
+container.addEventListener('mousedown', e => {
+  if (tool === 'move' && e.target === container) {
+    isPanning = true;
+    panStartX = e.clientX - panX;
+    panStartY = e.clientY - panY;
+    container.classList.add('grabbing');
+  }
+});
+window.addEventListener('mousemove', e => {
+  if (isPanning) {
+    panX = e.clientX - panStartX;
+    panY = e.clientY - panStartY;
+    updateTransform();
+  }
+  if (isCropping && cropActive) {
+    const rect = container.getBoundingClientRect();
+    cropEndX = (e.clientX - rect.left) / zoom;
+    cropEndY = (e.clientY - rect.top) / zoom;
+    updateCropRect();
+  }
+});
+window.addEventListener('mouseup', () => {
+  isPanning = false;
+  container.classList.remove('grabbing');
+});
+
+// ============ TOOLS ============
+document.getElementById('btnMove').addEventListener('click', () => { tool = 'move'; container.classList.remove('cropping'); cropRect.style.display = 'none'; cropActive = false; setActiveBtn('btnMove'); });
+document.getElementById('btnCrop').addEventListener('click', () => {
+  tool = 'crop'; container.classList.add('cropping'); cropRect.style.display = 'none'; cropActive = false; setActiveBtn('btnCrop');
+  if (originalImage) { ctx.drawImage(originalImage, 0, 0); }
+});
+
+function setActiveBtn(id) {
+  document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ============ CROP ============
+container.addEventListener('mousedown', e => {
+  if (tool === 'crop') {
+    const rect = container.getBoundingClientRect();
+    cropStartX = (e.clientX - rect.left) / zoom;
+    cropStartY = (e.clientY - rect.top) / zoom;
+    cropEndX = cropStartX;
+    cropEndY = cropStartY;
+    isCropping = true;
+    cropActive = true;
+    cropRect.style.display = 'block';
+    updateCropRect();
+  }
+});
+
+function updateCropRect() {
+  const x = Math.min(cropStartX, cropEndX);
+  const y = Math.min(cropStartY, cropEndY);
+  const w = Math.abs(cropEndX - cropStartX);
+  const h = Math.abs(cropEndY - cropStartY);
+  cropRect.style.left = (x * zoom + panX) + 'px';
+  cropRect.style.top = (y * zoom + panY) + 'px';
+  cropRect.style.width = (w * zoom) + 'px';
+  cropRect.style.height = (h * zoom) + 'px';
+}
+
+container.addEventListener('mouseup', e => {
+  if (isCropping && cropActive) {
+    isCropping = false;
+    const x = Math.min(cropStartX, cropEndX);
+    const y = Math.min(cropStartY, cropEndY);
+    const w = Math.abs(cropEndX - cropStartX);
+    const h = Math.abs(cropEndY - cropStartY);
+    if (w > 5 && h > 5) {
+      applyCrop(x, y, w, h);
+    }
+    cropRect.style.display = 'none';
+    cropActive = false;
+  }
+});
+
+function applyCrop(x, y, w, h) {
+  const imageData = ctx.getImageData(x, y, w, h);
+  canvas.width = w;
+  canvas.height = h;
+  overlay.width = w;
+  overlay.height = h;
+  ctx.putImageData(imageData, 0, 0);
+  saveHistory();
+  fitToScreen();
+  document.getElementById('imgInfo').textContent = `${w}×${h} | Cropped`;
+  notify('Crop applicato!');
+}
+
+// ============ UNDO / REDO ============
+function saveHistory() {
+  history = history.slice(0, historyIndex + 1);
+  history.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+  if (history.length > MAX_HISTORY) history.shift();
+  else historyIndex++;
+}
+
+document.getElementById('btnUndo').addEventListener('click', () => {
+  if (historyIndex > 0) {
+    historyIndex--;
+    ctx.putImageData(history[historyIndex], 0, 0);
+    canvas.width = history[historyIndex].width;
+    canvas.height = history[historyIndex].height;
+    overlay.width = canvas.width;
+    overlay.height = canvas.height;
+    notify('↩ Annullato');
+  }
+});
+
+document.getElementById('btnRedo').addEventListener('click', () => {
+  if (historyIndex < history.length - 1) {
+    historyIndex++;
+    ctx.putImageData(history[historyIndex], 0, 0);
+    canvas.width = history[historyIndex].width;
+    canvas.height = history[historyIndex].height;
+    overlay.width = canvas.width;
+    overlay.height = canvas.height;
+    notify('↪ Ripristinato');
+  }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'z') { e.preventDefault(); document.getElementById('btnUndo').click(); }
+  if (e.ctrlKey && e.key === 'y') { e.preventDefault(); document.getElementById('btnRedo').click(); }
+  if (e.key === 'v' || e.key === 'V') { tool = 'move'; setActiveBtn('btnMove'); container.classList.remove('cropping'); cropRect.style.display = 'none'; }
+  if (e.key === 'c' || e.key === 'C') { tool = 'crop'; setActiveBtn('btnCrop'); container.classList.add('cropping'); cropRect.style.display = 'none'; }
+});
+
+// ============ FILTERS ============
+document.getElementById('btnFilters').addEventListener('click', () => {
+  const panel = document.getElementById('filterPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+});
+
+const filterInputs = ['brightness','contrast','saturate','blur','sepia','grayscale','invert'];
+filterInputs.forEach(id => {
+  const inp = document.getElementById(id);
+  inp.addEventListener('input', () => {
+    filters[id] = parseInt(inp.value);
+    document.getElementById(id + 'Val').textContent = inp.value;
+    previewFilters();
+  });
+});
+
+function previewFilters() {
+  if (!originalImage) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.filter = `brightness(${100+filters.brightness}%) contrast(${100+filters.contrast}%) saturate(${100+filters.saturate}%) blur(${filters.blur}px) sepia(${filters.sepia}%) grayscale(${filters.grayscale}%) invert(${filters.invert}%)`;
+  ctx.drawImage(originalImage, 0, 0);
+  ctx.filter = 'none';
+}
+
+document.getElementById('btnApplyFilters').addEventListener('click', () => {
+  if (!originalImage) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.filter = `brightness(${100+filters.brightness}%) contrast(${100+filters.contrast}%) saturate(${100+filters.saturate}%) blur(${filters.blur}px) sepia(${filters.sepia}%) grayscale(${filters.grayscale}%) invert(${filters.invert}%)`;
+  ctx.drawImage(originalImage, 0, 0);
+  ctx.filter = 'none';
+  saveHistory();
+  document.getElementById('filterPanel').style.display = 'none';
+  notify('Filtri applicati!');
+});
+
+document.getElementById('btnResetFilters').addEventListener('click', () => {
+  filterInputs.forEach(id => {
+    filters[id] = 0;
+    document.getElementById(id).value = 0;
+    document.getElementById(id + 'Val').textContent = '0';
+  });
+  if (originalImage) { ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(originalImage,0,0); }
+});
+
+// ============ SAVE ============
+function saveImage(format, quality) {
+  if (!originalImage) { notify('Nessuna immagine da salvare!', true); return; }
+  const link = document.createElement('a');
+  const mime = format === 'png' ? 'image/png' : format === 'jpg' ? 'image/jpeg' : 'image/webp';
+  const ext = format;
+  link.download = `edited_image.${ext}`;
+  link.href = canvas.toDataURL(mime, quality);
+  link.click();
+  notify(`Salvato come ${ext.toUpperCase()}!`);
+}
+
+document.getElementById('btnSavePNG').addEventListener('click', () => saveImage('png', 1));
+document.getElementById('btnSaveJPG').addEventListener('click', () => saveImage('jpg', 0.92));
+document.getElementById('btnSaveWebP').addEventListener('click', () => saveImage('webp', 0.92));
+
+// ============ NOTIFICATION ============
+function notify(msg, isError = false) {
+  const n = document.getElementById('notification');
+  n.textContent = msg;
+  n.style.background = isError ? '#f38ba8' : '#a6e3a1';
+  n.style.color = isError ? '#1e1e2e' : '#1e1e2e';
+  n.classList.add('show');
+  setTimeout(() => n.classList.remove('show'), 2000);
+}
+
+// ============ INIT ============
+updateTransform();
+</script>
+</body>
+</html>

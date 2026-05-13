@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Block Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,400&family=JetBrains+Mono:wght@400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{
+  font-family:'DM Sans',system-ui,sans-serif;
+  background:#0a0a09;
+  color:#d8d3c9;
+  min-height:100vh;
+  padding:48px 24px 80px;
+  line-height:1.5;
+}
+.page{max-width:960px;margin:0 auto}
+.page-header{margin-bottom:36px}
+.page-header h1{font-family:'Instrument Serif',serif;font-size:2.6rem;font-weight:400;letter-spacing:-0.02em;color:#c99a2e;margin-bottom:2px}
+.page-header p{color:#6a6560;font-size:.88rem}
+.form-actions{display:flex;gap:12px;margin-top:20px}
+.btn-act{padding:10px 28px;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:.88rem;font-weight:600;cursor:pointer;transition:all .15s}
+.btn-primary{background:#c99a2e;color:#111}.btn-primary:hover{background:#d4a843}
+.btn-ghost{background:0 0;border:1px solid #333;color:#d8d3c9}.btn-ghost:hover{border-color:#555}
+.output-area{margin-top:40px;display:none}.output-area.show{display:block}
+.output-area h2{font-size:1rem;font-weight:600;color:#c99a2e;margin-bottom:10px}
+.output-area pre{background:#151514;border:1px solid #2a2a28;border-radius:10px;padding:24px;font-family:'JetBrains Mono',monospace;font-size:.8rem;line-height:1.7;color:#c8c3b8;overflow-x:auto;white-space:pre-wrap;word-break:break-word;max-height:500px;overflow-y:auto}
+@media(max-width:680px){.page-header h1{font-size:1.8rem}.form-actions{flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="page-header">
+    <h1>Block Editor</h1>
+    <p>Editor a blocchi stile Gutenberg — aggiungi, modifica, riordina e genera HTML pulito</p>
+  </header>
+  <form id="contentForm">
+    <div id="editor-mount"></div>
+    <div class="form-actions">
+      <button type="submit" class="btn-act btn-primary">Genera HTML</button>
+      <button type="button" class="btn-act btn-ghost" id="resetBtn">Reset</button>
+    </div>
+  </form>
+  <div id="outputArea" class="output-area">
+    <h2>HTML Generato</h2>
+    <button type="button" class="btn-act btn-ghost" id="copyBtn" style="margin-bottom:10px">Copia</button>
+    <pre id="outputCode"></pre>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  BlockEditor — Gutenberg-style Block Editor Component
+// ═══════════════════════════════════════════════════════════
+//
+//  USAGE:
+//    const editor = new BlockEditor('#container', { name: 'content' });
+//
+//    editor.getHTML()          → returns clean HTML string
+//    editor.setHTML('<p>Hi</p>') → loads blocks from HTML
+//    editor.clear()            → resets to single empty paragraph
+//    editor.onChange(fn)        → register change callback
+//    editor.destroy()          → remove everything
+//
+//  FORM INTEGRATION:
+//    A hidden <input> is created with the given `name`.
+//    On form submit, the value is the generated HTML.
+//
+// ═══════════════════════════════════════════════════════════
+
+class BlockEditor {
+
+  static TYPES = {
+    paragraph: { label:'Paragrafo',     icon:'¶',  cat:'text' },
+    heading:   { label:'Titolo',        icon:'H',  cat:'text' },
+    ulist:     { label:'Lista puntata', icon:'•',  cat:'text' },
+    olist:     { label:'Lista ordinata',icon:'1.', cat:'text' },
+    quote:     { label:'Citazione',     icon:'❝',  cat:'text' },
+    code:      { label:'Codice',        icon:'⟨⟩', cat:'text' },
+    image:     { label:'Immagine',      icon:'🖼', cat:'media' },
+    separator: { label:'Separatore',    icon:'—',  cat:'layout' },
+    table:     { label:'Tabella',       icon:'⊞',  cat:'layout' },
+  };
+
+  static _cssInjected = false;
+
+  // ── Styles ──────────────────────────────────────
+  static CSS = `
+.be-root{--bg:#171716;--sf:#222220;--sfh:#2a2a28;--bd:#3a3a38;--ac:#c99a2e;--ach:#d4a843;--tx:#ddd8ce;--mu:#7a7570;--dg:#d44;--cv:#faf7f0;--ct:#2a2520;--cb:#e2ded6;--r:10px;--rs:6px;font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);border-radius:12px;overflow:hidden;border:1px solid var(--bd);color:var(--tx);position:relative}
+.be-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--sf);border-bottom:1px solid var(--bd);gap:8px;flex-wrap:wrap}
+.be-grp{display:flex;align-items:center;gap:8px}
+.be-cnt{font-size:12px;color:var(--mu);margin-left:4px}
+.be-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid var(--bd);border-radius:var(--rs);background:var(--sf);color:var(--tx);font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap;line-height:1.2;user-select:none}
+.be-btn:hover{background:var(--sfh);border-color:var(--mu)}
+.be-btn-ac{background:var(--ac);border-color:var(--ac);color:#111;font-weight:600}.be-btn-ac:hover{background:var(--ach);border-color:var(--ach)}
+.be-btn-dg{color:var(--dg)}.be-btn-dg:hover{background:rgba(221,68,68,.1);border-color:var(--dg)}
+.be-dd-wrap{position:relative}
+.be-dd{position:absolute;top:calc(100% + 6px);left:0;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:12px;display:none;min-width:320px;z-index:300;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.be-dd.open{display:block}
+.be-dds{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--mu);padding:4px 6px 6px}
+.be-ddg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:8px}
+.be-ddg:last-child{margin-bottom:0}
+.be-ddi{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 8px;border:1px solid transparent;border-radius:8px;background:0 0;color:var(--tx);font-family:inherit;font-size:11px;cursor:pointer;transition:all .15s}
+.be-ddi:hover{background:var(--sfh);border-color:var(--bd)}
+.be-ddi span:first-child{font-size:22px;line-height:1}
+.be-cv{background:var(--cv);min-height:280px;padding:28px 28px 28px 60px;color:var(--ct);position:relative}
+.be-ins{position:relative;height:16px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;z-index:10}
+.be-ins::before{content:'';position:absolute;left:-32px;right:0;top:50%;height:2px;background:var(--ac);opacity:.3;border-radius:1px}
+.be-insb{position:relative;width:22px;height:22px;border-radius:50%;background:var(--ac);border:2px solid var(--cv);color:#111;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;transition:transform .15s;line-height:1;padding:0}
+.be-insb:hover{transform:scale(1.2)}
+.be-blk:hover+.be-ins,.be-ins:hover,.be-ins:focus-within,.be-cv:hover>.be-ins:last-child,.be-ins:only-child{opacity:1}
+.be-ins:has(+.be-blk:hover){opacity:1}
+.be-blk{position:relative;border-radius:var(--rs);border:2px solid transparent;transition:border-color .15s;padding:2px 4px}
+.be-blk:hover{border-color:rgba(201,154,46,.25)}
+.be-blk.sel{border-color:rgba(201,154,46,.5)}
+.be-blk.drag{opacity:.3}
+.be-ctrls{position:absolute;left:-48px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:2px;opacity:0;transition:opacity .15s;z-index:15}
+.be-blk:hover .be-ctrls,.be-blk.sel .be-ctrls{opacity:1}
+.be-ct{width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:1px solid var(--cb);border-radius:4px;background:#fff;color:var(--ct);cursor:pointer;font-size:11px;transition:all .12s;padding:0;line-height:1}
+.be-ct:hover{background:var(--ac);color:#111;border-color:var(--ac)}
+.be-ct-x:hover{background:var(--dg);border-color:var(--dg);color:#fff}
+.be-dh{cursor:grab;font-size:14px;color:#aaa}.be-dh:active{cursor:grabbing}
+.be-ed{font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.75;color:var(--ct);outline:none;padding:8px 12px;min-height:1.8em;border-radius:4px;word-wrap:break-word;overflow-wrap:break-word}
+.be-ed:focus{background:rgba(255,255,255,.4)}
+.be-ed:empty::before{content:attr(data-ph);color:#b5ad9e;pointer-events:none;font-style:italic}
+.be-ed h1,.be-ed h2,.be-ed h3,.be-ed h4{margin:0}
+.be-ed1{font-size:2em;font-weight:700;line-height:1.2}
+.be-ed2{font-size:1.6em;font-weight:700;line-height:1.25}
+.be-ed3{font-size:1.3em;font-weight:600;line-height:1.3}
+.be-ed4{font-size:1.1em;font-weight:600;line-height:1.35}
+.be-hdr{display:flex;gap:4px;padding:4px 12px 2px}
+.be-lv{padding:3px 10px;border:1px solid var(--cb);border-radius:4px;background:0 0;color:var(--ct);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:all .12s;opacity:.4}
+.be-lv:hover{opacity:.75}
+.be-lv.act{opacity:1;background:var(--ac);border-color:var(--ac);color:#111}
+.be-elist{padding-left:28px;font-family:Georgia,serif;font-size:16px;line-height:1.75;outline:none}
+.be-elist li{padding:2px 0;outline:none}
+.be-elist li::marker{color:var(--ac)}
+.be-eqt{border-left:4px solid var(--ac);padding-left:20px;font-style:italic;color:#5a5548;font-family:Georgia,serif;font-size:16px;line-height:1.75}
+.be-ecode{font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.6;background:#1e1e1c;color:#d4d0c8;padding:16px;border:1px solid var(--cb);border-radius:6px;resize:vertical;width:100%;outline:none;tab-size:2;display:block;font-family:inherit}
+.be-ecode:focus{border-color:var(--ac)}
+.be-sep{border:none;border-top:2px solid var(--cb);margin:8px 12px}
+.be-fb{padding:8px 12px}
+.be-fr{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.be-fr label{flex-shrink:0;width:80px;font-size:12px;font-weight:600;color:#7a7570}
+.be-inp{flex:1;padding:7px 12px;border:1px solid var(--cb);border-radius:6px;font-family:inherit;font-size:13px;color:var(--ct);background:#fff;outline:none;transition:border-color .15s}
+.be-inp:focus{border-color:var(--ac)}
+.be-file{font-family:inherit;font-size:12px}
+.be-imgpv{margin-top:10px;border-radius:6px;overflow:hidden;border:1px solid var(--cb)}
+.be-imgpv img{max-width:100%;display:block}
+.be-tbw{overflow-x:auto;padding:8px 12px}
+.be-tbl{width:100%;border-collapse:collapse;font-family:Georgia,serif;font-size:14px}
+.be-tbl th,.be-tbl td{border:1px solid var(--cb);padding:8px 12px;outline:none;min-width:70px}
+.be-tbl th{background:rgba(0,0,0,.04);font-weight:600;text-align:left}
+.be-tbl td:focus,.be-tbl th:focus{box-shadow:inset 0 0 0 2px var(--ac)}
+.be-tbc{display:flex;gap:6px;padding:6px 12px 0;flex-wrap:wrap}
+.be-tbb{font-size:12px!important;padding:4px 10px!important}
+.be-flt{position:fixed;display:flex;align-items:center;gap:2px;background:#1a1a18;border:1px solid #3a3a38;border-radius:8px;padding:4px;box-shadow:0 4px 16px rgba(0,0,0,.35);z-index:9999;pointer-events:auto}
+.be-flt button{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border:none;border-radius:5px;background:0 0;color:var(--tx);font-size:14px;cursor:pointer;transition:background .12s;padding:0}
+.be-flt button:hover{background:rgba(255,255,255,.1)}
+.be-hov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:10000;backdrop-filter:blur(4px)}
+.be-hom{background:var(--sf);border:1px solid var(--bd);border-radius:14px;width:90vw;max-width:800px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 16px 64px rgba(0,0,0,.45)}
+.be-hoh{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--bd)}
+.be-hoh h3{font-size:15px;font-weight:600}
+.be-hoc{flex:1;overflow:auto;padding:20px;margin:0;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.6;color:var(--tx);white-space:pre-wrap;word-break:break-word}
+.be-hof{padding:12px 20px;border-top:1px solid var(--bd);display:flex;justify-content:flex-end;gap:8px}
+.be-dropi{height:3px;background:var(--ac);border-radius:2px;margin:2px 0}
+@media(max-width:680px){.be-cv{padding:18px 12px 18px 44px}.be-ctrls{left:-38px}.be-ct{width:20px;height:20px;font-size:10px}.be-dd{min-width:260px;left:-20px}.be-ddg{grid-template-columns:repeat(2,1fr)}}
+`;
+
+  constructor(container, opts = {}) {
+    this.el = typeof container === 'string' ? document.querySelector(container) : container;
+    if (!this.el) throw new Error('BlockEditor: container not found');
+    this.opts = { name:'editor_content', onChange:null, ...opts };
+    this.blocks = [];
+    this._uid = 0;
+    this._selId = null;
+    this._dragId = null;
+    this._pendingIns = null;
+    this._ab = new AbortController();
+    this._changeHandlers = [];
+
+    if (!BlockEditor._cssInjected) {
+      const s = document.createElement('style');
+      s.textContent = BlockEditor.CSS;
+      document.head.appendChild(s);
+      BlockEditor._cssInjected = true;
+    }
+    this._build();
+    this._bind();
+    this._initForm();
+    // Start with one empty paragraph
+    this.blocks.push(this._mk('paragraph'));
+    this._render();
+  }
+
+  // ── Public API ──────────────────────────────────
+
+  getHTML() { this._syncAll(); return this._toHTML(); }
+
+  setHTML(html) {
+    this.blocks = [];
+    this._selId = null;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const walk = (node) => {
+      for (const ch of node.childNodes) {
+        if (ch.nodeType === 3) { // text
+          const t = ch.textContent.trim();
+          if (t) {
+            const last = this.blocks[this.blocks.length - 1];
+            if (last && last.type === 'paragraph') last.content += this._esc(t);
+            else this.blocks.push(this._mk('paragraph', this._esc(t)));
+          }
+          continue;
+        }
+        if (ch.nodeType !== 1) continue;
+        const tag = ch.tagName.toLowerCase();
+        if (tag === 'p') this.blocks.push(this._mk('paragraph', ch.innerHTML));
+        else if (/^h[1-4]$/.test(tag)) this.blocks.push(this._mk('heading', ch.innerHTML, { level: parseInt(tag[1]) }));
+        else if (tag === 'ul') this.blocks.push(this._mk('ulist', ch.innerHTML));
+        else if (tag === 'ol') this.blocks.push(this._mk('olist', ch.innerHTML));
+        else if (tag === 'blockquote') this.blocks.push(this._mk('quote', ch.innerHTML));
+        else if (tag === 'pre') this.blocks.push(this._mk('code', ch.textContent));
+        else if (tag === 'hr') this.blocks.push(this._mk('separator'));
+        else if (tag === 'figure') {
+          const img = ch.querySelector('img');
+          const cap = ch.querySelector('figcaption');
+          this.blocks.push(this._mk('image', '', { src: img?.src || '', alt: img?.alt || '', caption: cap?.textContent || '' }));
+        }
+        else if (tag === 'table') {
+          const rows = [];
+          ch.querySelectorAll('tr').forEach(tr => {
+            const cells = [];
+            tr.querySelectorAll('th,td').forEach(c => cells.push(c.innerHTML));
+            rows.push(cells);
+          });
+          this.blocks.push(this._mk('table', '', { rows }));
+        }
+        else walk(ch);
+      }
+    };
+    walk(tmp);
+    if (!this.blocks.length) this.blocks.push(this._mk('paragraph'));
+    this._render();
+  }
+
+  clear() {
+    this.blocks = [this._mk('paragraph')];
+    this._selId = null;
+    this._render();
+    this._fire();
+  }
+
+  destroy() {
+    this._ab.abort();
+    this._flt?.remove();
+    this._hov?.remove();
+    this.root?.remove();
+    this._hidden?.remove();
+  }
+
+  onChange(fn) { this._changeHandlers.push(fn); }
+
+  // ── Build UI ────────────────────────────────────
+
+  _build() {
+    this.root = document.createElement('div');
+    this.root.className = 'be-root';
+
+    // Toolbar
+    const bar = document.createElement('div');
+    bar.className = 'be-bar';
+    bar.innerHTML = `
+      <div class="be-grp">
+        <div class="be-dd-wrap">
+          <button type="button" class="be-btn be-addbtn">+ Blocco</button>
+          <div class="be-dd be-add-dd"></div>
+        </div>
+        <span class="be-cnt"></span>
+      </div>
+      <div class="be-grp">
+        <button type="button" class="be-btn be-htmlbtn">&lt;/&gt; HTML</button>
+      </div>`;
+    this.root.appendChild(bar);
+
+    // Canvas
+    this.cv = document.createElement('div');
+    this.cv.className = 'be-cv';
+    this.root.appendChild(this.cv);
+
+    this.el.appendChild(this.root);
+
+    this._addBtn = bar.querySelector('.be-addbtn');
+    this._addDD = bar.querySelector('.be-add-dd');
+    this._htmlBtn = bar.querySelector('.be-htmlbtn');
+    this._cntEl = bar.querySelector('.be-cnt');
+
+    // Populate add dropdown
+    const cats = { text:'Testo', media:'Media', layout:'Layout' };
+    let dhtml = '';
+    for (const [ck, cl] of Object.entries(cats)) {
+      dhtml += `<div class="be-dds">${cl}</div><div class="be-ddg">`;
+      for (const [t, info] of Object.entries(BlockEditor.TYPES)) {
+        if (info.cat !== ck) continue;
+        dhtml += `<button type="button" class="be-ddi" data-t="${t}"><span>${info.icon}</span><span>${info.label}</span></button>`;
+      }
+      dhtml += '</div>';
+    }
+    this._addDD.innerHTML = dhtml;
+
+    // Floating format bar
+    this._flt = document.createElement('div');
+    this._flt.className = 'be-flt';
+    this._flt.style.display = 'none';
+    this._flt.innerHTML = `
+      <button type="button" data-c="bold" title="Grassetto"><strong>B</strong></button>
+      <button type="button" data-c="italic" title="Corsivo"><em>I</em></button>
+      <button type="button" data-c="underline" title="Sottolineato"><u>U</u></button>
+      <button type="button" data-c="strikeThrough" title="Barrato"><s>S</s></button>
+      <button type="button" data-c="link" title="Link">🔗</button>`;
+    document.body.appendChild(this._flt);
+
+    // HTML overlay
+    this._hov = document.createElement('div');
+    this._hov.className = 'be-hov';
+    this._hov.style.display = 'none';
+    this._hov.innerHTML = `
+      <div class="be-hom">
+        <div class="be-hoh"><h3>HTML Generato</h3><button type="button" class="be-btn be-hocl">&times;</button></div>
+        <pre class="be-hoc"></pre>
+        <div class="be-hof"><button type="button" class="be-btn be-btn-ac be-hocp">Copia</button></div>
+      </div>`;
+    document.body.appendChild(this._hov);
+    this._hovCode = this._hov.querySelector('.be-hoc');
+  }
+
+  // ── Events ──────────────────────────────────────
+
+  _bind() {
+    const sig = { signal: this._ab.signal };
+
+    this._addBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      this._pendingIns = null;
+      this._addDD.classList.toggle('open');
+    }, sig);
+
+    this._addDD.addEventListener('click', e => {
+      const it = e.target.closest('.be-ddi');
+      if (!it) return;
+      const type = it.dataset.t;
+      let ib = this.blocks.length;
+      if (this._pendingIns !== null) { ib = this._pendingIns; this._pendingIns = null; }
+      else if (this._selId) { ib = this._idx(this._selId) + 1; }
+      this._add(type, ib);
+      this._closeDD();
+    }, sig);
+
+    document.addEventListener('click', () => this._closeDD(), sig);
+
+    this._htmlBtn.addEventListener('click', () => this._showHTML(), sig);
+    this._hov.querySelector('.be-hocl').addEventListener('click', () => this._hideHTML(), sig);
+    this._hov.querySelector('.be-hocp').addEventListener('click', () => {
+      navigator.clipboard.writeText(this.getHTML()).then(() => {
+        const b = this._hov.querySelector('.be-hocp');
+        b.textContent = 'Copiato!';
+        setTimeout(() => b.textContent = 'Copia', 1500);
+      });
+    }, sig);
+    this._hov.addEventListener('click', e => { if (e.target === this._hov) this._hideHTML(); }, sig);
+
+    this._flt.addEventListener('mousedown', e => e.preventDefault(), sig);
+    this._flt.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.c === 'link') {
+        const sel = window.getSelection();
+        const anchor = sel?.anchorNode?.parentElement?.closest('a');
+        if (anchor) document.execCommand('unlink');
+        else { const url = prompt('URL:', 'https://'); if (url) document.execCommand('createLink', false, url); }
+      } else document.execCommand(b.dataset.c, false, null);
+      this._fire();
+    }, sig);
+
+    document.addEventListener('selectionchange', () => this._updateFlt(), sig);
+
+    this.cv.addEventListener('click', e => {
+      // Inserter
+      const ib = e.target.closest('.be-insb');
+      if (ib) { this._showDDNear(ib, parseInt(ib.closest('.be-ins').dataset.ib)); return; }
+      // Controls
+      const ct = e.target.closest('.be-ct');
+      if (ct) {
+        const bl = ct.closest('.be-blk');
+        const a = ct.dataset.a;
+        const id = bl.dataset.id;
+        if (a === 'up') this._move(id, -1);
+        else if (a === 'down') this._move(id, 1);
+        else if (a === 'dup') this._dup(id);
+        else if (a === 'del') this._remove(id);
+        return;
+      }
+      // Heading level
+      const lv = e.target.closest('.be-lv');
+      if (lv) {
+        const blk = this._blk(lv.closest('.be-blk').dataset.id);
+        if (!blk) return;
+        blk.attrs.level = parseInt(lv.dataset.lv);
+        lv.closest('.be-hdr').querySelectorAll('.be-lv').forEach(b => b.classList.remove('act'));
+        lv.classList.add('act');
+        const ed = lv.closest('.be-blk').querySelector('.be-ed');
+        if (ed) ed.className = ed.className.replace(/be-ed\d/, 'be-ed' + blk.attrs.level);
+        this._fire();
+        return;
+      }
+      // Table controls
+      const tb = e.target.closest('.be-tbb');
+      if (tb) {
+        const blk = this._blk(tb.closest('.be-blk').dataset.id);
+        if (!blk) return;
+        const act = tb.dataset.act;
+        const r = blk.attrs.rows;
+        if (act === 'ar') r.push(new Array(r[0]?.length || 3).fill(''));
+        else if (act === 'ac') r.forEach(row => row.push(''));
+        else if (act === 'rr') { if (r.length > 1) r.pop(); }
+        else if (act === 'rc') { if (r[0]?.length > 1) r.forEach(row => row.pop()); }
+        this._reRender(tb.closest('.be-blk').dataset.id);
+        this._fire();
+        return;
+      }
+      // Select block
+      const bl = e.target.closest('.be-blk');
+      if (bl) this._select(bl.dataset.id);
+    }, sig);
+
+    // Input delegation
+    this.cv.addEventListener('input', e => {
+      const bl = e.target.closest('.be-blk');
+      if (!bl) return;
+      const blk = this._blk(bl.dataset.id);
+      if (!blk) return;
+      if (e.target.classList.contains('be-isrc')) { blk.attrs.src = e.target.value; this._updImgPv(bl); this._fire(); }
+      else if (e.target.classList.contains('be-ialt')) { blk.attrs.alt = e.target.value; this._fire(); }
+      else if (e.target.classList.contains('be-icap')) { blk.attrs.caption = e.target.value; this._fire(); }
+      else if (e.target.classList.contains('be-ecode')) { blk.content = e.target.value; this._fire(); }
+      // Contenteditable blocks are synced on demand
+      else if (e.target.isContentEditable || e.target.closest('[contenteditable]')) { this._fire(); }
+    }, sig);
+
+    // File upload
+    this.cv.addEventListener('change', e => {
+      if (!e.target.classList.contains('be-file')) return;
+      const file = e.target.files[0];
+      if (!file) return;
+      const rd = new FileReader();
+      rd.onload = () => {
+        const bl = e.target.closest('.be-blk');
+        const inp = bl.querySelector('.be-isrc');
+        if (inp) { inp.value = rd.result; inp.dispatchEvent(new Event('input')); }
+      };
+      rd.readAsDataURL(file);
+    }, sig);
+
+    // Keyboard
+    this.cv.addEventListener('keydown', e => this._onKey(e), sig);
+
+    // Paste
+    this.cv.addEventListener('paste', e => {
+      const ed = e.target.closest('[contenteditable]');
+      if (!ed) return;
+      e.preventDefault();
+      const html = e.clipboardData.getData('text/html');
+      const text = e.clipboardData.getData('text/plain');
+      if (html) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        tmp.querySelectorAll('script,style,meta,link').forEach(el => el.remove());
+        tmp.querySelectorAll('*').forEach(el => { el.removeAttribute('style'); el.removeAttribute('class'); el.removeAttribute('id'); });
+        document.execCommand('insertHTML', false, tmp.innerHTML);
+      } else {
+        document.execCommand('insertText', false, text);
+      }
+      this._fire();
+    }, sig);
+
+    // Drag & drop
+    this.cv.addEventListener('dragstart', e => {
+      if (!e.target.classList.contains('be-dh')) { e.preventDefault(); return; }
+      const bl = e.target.closest('.be-blk');
+      this._dragId = bl.dataset.id;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', this._dragId);
+      requestAnimationFrame(() => bl.classList.add('drag'));
+    }, sig);
+
+    this.cv.addEventListener('dragover', e => {
+      if (!this._dragId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const bl = e.target.closest('.be-blk');
+      if (!bl || bl.dataset.id === this._dragId) return;
+      this.cv.querySelectorAll('.be-dropi').forEach(el => el.remove());
+      const rect = bl.getBoundingClientRect();
+      const ind = document.createElement('div');
+      ind.className = 'be-dropi';
+      if (e.clientY < rect.top + rect.height / 2) bl.before(ind); else bl.after(ind);
+    }, sig);
+
+    this.cv.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!this._dragId) return;
+      const ind = this.cv.querySelector('.be-dropi');
+      if (!ind) { this._cleanDrag(); return; }
+      let ni = 0;
+      for (const ch of this.cv.children) {
+        if (ch === ind) break;
+        if (ch.classList.contains('be-blk')) ni++;
+      }
+      const oi = this._idx(this._dragId);
+      if (oi === -1) { this._cleanDrag(); return; }
+      const [blk] = this.blocks.splice(oi, 1);
+      if (ni > oi) ni--;
+      this.blocks.splice(ni, 0, blk);
+      this._cleanDrag();
+      this._render();
+      this._select(blk.id);
+      this._fire();
+    }, sig);
+
+    this.cv.addEventListener('dragend', () => this._cleanDrag(), sig);
+  }
+
+  _initForm() {
+    this._hidden = document.createElement('input');
+    this._hidden.type = 'hidden';
+    this._hidden.name = this.opts.name;
+    this.el.appendChild(this._hidden);
+    const form = this.root.closest('form');
+    if (!form) return;
+    form.addEventListener('submit', () => { this._hidden.value = this.getHTML(); }, { signal: this._ab.signal });
+    form.addEventListener('formdata', e => { e.formData.set(this.opts.name, this.getHTML()); }, { signal: this._ab.signal });
+  }
+
+  // ── Block CRUD ──────────────────────────────────
+
+  _mk(type, content = '', attrs = {}) {
+    const defs = {
+      heading: { attrs: { level: 2 } },
+      ulist:   { content: '<li></li>' },
+      olist:   { content: '<li></li>' },
+      image:   { attrs: { src: '', alt: '', caption: '' } },
+      table:   { attrs: { rows: [['','',''],['','',''],['','','']] } },
+    };
+    const d = defs[type] || {};
+    return { id: 'b' + (++this._uid), type, content: content || d.content || '', attrs: { ...(d.attrs || {}), ...attrs } };
+  }
+
+  _add(type, ib = -1) {
+    const blk = this._mk(type);
+    if (ib >= 0 && ib <= this.blocks.length) this.blocks.splice(ib, 0, blk);
+    else this.blocks.push(blk);
+    this._render();
+    this._focus(blk.id);
+    this._select(blk.id);
+    this._fire();
+  }
+
+  _remove(id) {
+    const i = this._idx(id);
+    if (i === -1) return;
+    const prev = i > 0 ? this.blocks[i - 1].id : null;
+    const next = i < this.blocks.length - 1 ? this.blocks[i + 1].id : null;
+    this.blocks.splice(i, 1);
+    if (!this.blocks.length) {
+      const nb = this._mk('paragraph');
+      this.blocks.push(nb);
+      this._render();
+      this._focus(nb.id);
+    } else {
+      this._render();
+      this._focus(next || prev);
+    }
+    this._fire();
+  }
+
+  _move(id, dir) {
+    const i = this._idx(id);
+    if (i === -1) return;
+    const ni = i + dir;
+    if (ni < 0 || ni >= this.blocks.length) return;
+    [this.blocks[i], this.blocks[ni]] = [this.blocks[ni], this.blocks[i]];
+    this._render();
+    this._focus(id);
+    this._select(id);
+    this._fire();
+  }
+
+  _dup(id) {
+    const i = this._idx(id);
+    if (i === -1) return;
+    this._syncBlk(id);
+    const src = this.blocks[i];
+    const nb = this._mk(src.type, src.content, src.type === 'table' ? { rows: src.attrs.rows.map(r => [...r]) } : { ...src.attrs });
+    this.blocks.splice(i + 1, 0, nb);
+    this._render();
+    this._focus(nb.id);
+    this._select(nb.id);
+    this._fire();
+  }
+
+  // ── Rendering ───────────────────────────────────
+
+  _render() {
+    this.cv.innerHTML = '';
+    if (!this.blocks.length) {
+      this.cv.appendChild(this._mkIns(0));
+    } else {
+      this.blocks.forEach((b, i) => {
+        this.cv.appendChild(this._mkIns(i));
+        this.cv.appendChild(this._mkBlk(b));
+      });
+      this.cv.appendChild(this._mkIns(-1));
+    }
+    this._updCnt();
+  }
+
+  _mkIns(ib) {
+    const d = document.createElement('div');
+    d.className = 'be-ins';
+    d.dataset.ib = ib;
+    d.innerHTML = '<button type="button" class="be-insb" title="Aggiungi blocco">+</button>';
+    return d;
+  }
+
+  _mkBlk(b) {
+    const el = document.createElement('div');
+    el.className = 'be-blk' + (b.id === this._selId ? ' sel' : '');
+    el.dataset.id = b.id;
+    el.innerHTML = `
+      <div class="be-ctrls">
+        <button type="button" class="be-ct be-dh" draggable="true" title="Trascina">⠿</button>
+        <button type="button" class="be-ct" data-a="up" title="Su">↑</button>
+        <button type="button" class="be-ct" data-a="down" title="Giù">↓</button>
+        <button type="button" class="be-ct" data-a="dup" title="Duplica">⧉</button>
+        <button type="button" class="be-ct be-ct-x" data-a="del" title="Elimina">✕</button>
+      </div>
+      <div class="be-body">${this._renderBody(b)}</div>`;
+    return el;
+  }
+
+  _renderBody(b) {
+    const esc = s => this._escA(s || '');
+    switch (b.type) {
+      case 'paragraph':
+        return `<div contenteditable class="be-ed" data-ph="Scrivi un paragrafo…">${b.content}</div>`;
+      case 'heading': {
+        const lv = b.attrs.level || 2;
+        let h = '<div class="be-hdr">';
+        for (let i = 1; i <= 4; i++) h += `<button type="button" class="be-lv${i === lv ? ' act' : ''}" data-lv="${i}">H${i}</button>`;
+        h += `</div><div contenteditable class="be-ed be-ed${lv}" data-ph="Scrivi un titolo…">${b.content}</div>`;
+        return h;
+      }
+      case 'ulist':
+        return `<ul contenteditable class="be-ed be-elist">${b.content}</ul>`;
+      case 'olist':
+        return `<ol contenteditable class="be-ed be-elist">${b.content}</ol>`;
+      case 'quote':
+        return `<div contenteditable class="be-ed be-eqt" data-ph="Scrivi una citazione…">${b.content}</div>`;
+      case 'code':
+        return `<textarea class="be-ecode" placeholder="Codice…" rows="5">${this._escH(b.content)}</textarea>`;
+      case 'separator':
+        return '<hr class="be-sep">';
+      case 'image': {
+        const { src, alt, caption } = b.attrs;
+        let h = '<div class="be-fb">';
+        h += `<div class="be-fr"><label>URL</label><input type="text" class="be-inp be-isrc" value="${esc(src)}" placeholder="https://…"></div>`;
+        h += `<div class="be-fr"><label>Alt text</label><input type="text" class="be-inp be-ialt" value="${esc(alt)}" placeholder="Descrizione"></div>`;
+        h += `<div class="be-fr"><label>Didascalia</label><input type="text" class="be-inp be-icap" value="${esc(caption)}" placeholder="Opzionale"></div>`;
+        h += `<div class="be-fr"><label>Carica</label><input type="file" class="be-file" accept="image/*"></div>`;
+        if (src) h += `<div class="be-imgpv"><img src="${esc(src)}" alt="${esc(alt)}" onerror="this.alt='Non trovata';this.style.opacity=.3"></div>`;
+        h += '</div>';
+        return h;
+      }
+      case 'table': {
+        const { rows } = b.attrs;
+        let h = '<div class="be-tbw"><table class="be-tbl">';
+        if (rows.length > 0) {
+          h += '<thead><tr>';
+          rows[0].forEach(c => h += `<th contenteditable>${c}</th>`);
+          h += '</tr></thead>';
+        }
+        if (rows.length > 1) {
+          h += '<tbody>';
+          for (let r = 1; r < rows.length; r++) {
+            h += '<tr>';
+            rows[r].forEach(c => h += `<td contenteditable>${c}</td>`);
+            h += '</tr>';
+          }
+          h += '</tbody>';
+        }
+        h += '</table></div>';
+        h += '<div class="be-tbc">';
+        h += '<button type="button" class="be-btn be-tbb" data-act="ar">+ Riga</button>';
+        h += '<button type="button" class="be-btn be-tbb" data-act="ac">+ Colonna</button>';
+        h += '<button type="button" class="be-btn be-tbb be-btn-dg" data-act="rr">− Riga</button>';
+        h += '<button type="button" class="be-btn be-tbb be-btn-dg" data-act="rc">− Colonna</button>';
+        h += '</div>';
+        return h;
+      }
+      default:
+        return `<div contenteditable class="be-ed">${b.content}</div>`;
+    }
+  }
+
+  _reRender(id) {
+    const blk = this.blocks.find(b => b.id === id);
+    const old = this.cv.querySelector(`[data-id="${id}"]`);
+    if (!blk || !old) return;
+    old.replaceWith(this._mkBlk(blk));
+  }
+
+  // ── Content sync ────────────────────────────────
+
+  _syncBlk(id) {
+    const blk = this.blocks.find(b => b.id === id);
+    const el = this.cv.querySelector(`[data-id="${id}"]`);
+    if (!blk || !el) return;
+    switch (blk.type) {
+      case 'paragraph': case 'heading': case 'quote': case 'ulist': case 'olist': {
+        const ed = el.querySelector('.be-ed');
+        if (ed) blk.content = ed.innerHTML;
+        break;
+      }
+      case 'code': {
+        const ta = el.querySelector('.be-ecode');
+        if (ta) blk.content = ta.value;
+        break;
+      }
+      case 'image':
+        blk.attrs.src = el.querySelector('.be-isrc')?.value || '';
+        blk.attrs.alt = el.querySelector('.be-ialt')?.value || '';
+        blk.attrs.caption = el.querySelector('.be-icap')?.value || '';
+        break;
+      case 'table': {
+        const trs = el.querySelectorAll('tr');
+        blk.attrs.rows = Array.from(trs).map(tr => Array.from(tr.querySelectorAll('th,td')).map(c => c.innerHTML));
+        break;
+      }
+    }
+  }
+
+  _syncAll() { this.blocks.forEach(b => this._syncBlk(b.id)); }
+
+  // ── HTML generation ─────────────────────────────
+
+  _toHTML() {
+    return this.blocks.map(b => this._bhtml(b)).filter(Boolean).join('\n');
+  }
+
+  _bhtml(b) {
+    const cl = h => this._cleanInline(h);
+    switch (b.type) {
+      case 'paragraph': { const c = cl(b.content); return c ? `<p>${c}</p>` : ''; }
+      case 'heading': {
+        const lv = b.attrs.level || 2;
+        const c = cl(b.content);
+        return c ? `<h${lv}>${c}</h${lv}>` : '';
+      }
+      case 'ulist': {
+        const items = this._listItems(b.content);
+        if (!items.length) return '';
+        return `<ul>\n${items.map(i => `  <li>${cl(i)}</li>`).join('\n')}\n</ul>`;
+      }
+      case 'olist': {
+        const items = this._listItems(b.content);
+        if (!items.length) return '';
+        return `<ol>\n${items.map(i => `  <li>${cl(i)}</li>`).join('\n')}\n</ol>`;
+      }
+      case 'quote': {
+        const c = cl(b.content);
+        return c ? `<blockquote>\n  <p>${c}</p>\n</blockquote>` : '';
+      }
+      case 'code':
+        return b.content ? `<pre><code>${this._escH(b.content)}</code></pre>` : '';
+      case 'separator':
+        return '<hr>';
+      case 'image': {
+        const { src, alt, caption } = b.attrs;
+        if (!src) return '';
+        let h = '<figure>';
+        h += `\n  <img src="${this._escA(src)}" alt="${this._escA(alt || '')}">`;
+        if (caption) h += `\n  <figcaption>${cl(caption)}</figcaption>`;
+        h += '\n</figure>';
+        return h;
+      }
+      case 'table': {
+        const { rows } = b.attrs;
+        if (!rows?.length) return '';
+        let h = '<table>';
+        if (rows.length > 0) {
+          h += '\n  <thead>\n    <tr>';
+          rows[0].forEach(c => h += `\n      <th>${cl(c)}</th>`);
+          h += '\n    </tr>\n  </thead>';
+        }
+        if (rows.length > 1) {
+          h += '\n  <tbody>';
+          for (let r = 1; r < rows.length; r++) {
+            h += '\n    <tr>';
+            rows[r].forEach(c => h += `\n      <td>${cl(c)}</td>`);
+            h += '\n    </tr>';
+          }
+          h += '\n  </tbody>';
+        }
+        h += '\n</table>';
+        return h;
+      }
+      default: return '';
+    }
+  }
+
+  _cleanInline(html) {
+    if (!html) return '';
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    // Remove empty elements
+    tmp.querySelectorAll(':empty').forEach(el => {
+      if (!['BR','HR','IMG','INPUT'].includes(el.tagName)) el.remove();
+    });
+    const out = tmp.innerHTML.trim()
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<div>/gi, '\n')
+      .replace(/<\/div>/gi, '')
+      .replace(/\n{3,}/g, '\n\n');
+    // Strip wrapper if only child
+    tmp.innerHTML = out;
+    if (tmp.childNodes.length === 1 && tmp.firstChild.nodeType === 1) {
+      const tag = tmp.firstChild.tagName.toLowerCase();
+      if (['div','span'].includes(tag)) return tmp.firstChild.innerHTML;
+    }
+    return out;
+  }
+
+  _listItems(html) {
+    if (!html) return [];
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const lis = tmp.querySelectorAll('li');
+    if (lis.length) return Array.from(lis).map(li => li.innerHTML).filter(i => i.trim());
+    // Fallback: split by line
+    return html.split(/<br\s*\/?>/i).map(s => s.trim()).filter(Boolean);
+  }
+
+  // ── Formatting toolbar ──────────────────────────
+
+  _updateFlt() {
+    const sel = window.getSelection();
+    if (!sel.rangeCount || sel.isCollapsed) { this._flt.style.display = 'none'; return; }
+    const range = sel.getRangeAt(0);
+    if (!this.cv.contains(range.commonAncestorContainer)) { this._flt.style.display = 'none'; return; }
+    const node = range.commonAncestorContainer.nodeType === 3 ? range.commonAncestorContainer.parentElement : range.commonAncestorContainer;
+    if (!node.closest('[contenteditable]') && !node.closest('.be-elist')) { this._flt.style.display = 'none'; return; }
+    const rect = range.getBoundingClientRect();
+    this._flt.style.display = 'flex';
+    this._flt.style.left = `${rect.left + rect.width / 2}px`;
+    this._flt.style.top = `${rect.top - 48}px`;
+    this._flt.style.transform = 'translateX(-50%)';
+  }
+
+  // ── Keyboard ────────────────────────────────────
+
+  _onKey(e) {
+    const bl = e.target.closest('.be-blk');
+    if (!bl) return;
+    const id = bl.dataset.id;
+    const blk = this.blocks.find(b => b.id === id);
+    if (!blk) return;
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      if (blk.type === 'code') return;
+      if (blk.type === 'ulist' || blk.type === 'olist') {
+        const ed = e.target.closest('.be-ed');
+        if (!ed) return;
+        const items = ed.querySelectorAll('li');
+        const last = items[items.length - 1];
+        if (last && !last.textContent.trim() && items.length > 1) {
+          e.preventDefault();
+          last.remove();
+          this._syncBlk(id);
+          this._add('paragraph', this._idx(id) + 1);
+        }
+        return;
+      }
+      e.preventDefault();
+      this._add('paragraph', this._idx(id) + 1);
+      return;
+    }
+
+    if (e.key === 'Backspace' && !e.shiftKey) {
+      if (['code','separator','image','table'].includes(blk.type)) return;
+      const ed = e.target.closest('.be-ed');
+      if (!ed) return;
+      const sel = window.getSelection();
+      if (!sel.rangeCount || !sel.isCollapsed) return;
+      if (!this._atStart(ed, sel)) return;
+      if (this._empty(ed)) {
+        e.preventDefault();
+        const prevId = this._idx(id) > 0 ? this.blocks[this._idx(id) - 1].id : null;
+        this._remove(id);
+        if (prevId) this._focus(prevId, true);
+      }
+    }
+
+    if (e.key === 'Delete' && !e.shiftKey) {
+      if (['code','separator','image','table'].includes(blk.type)) return;
+      const ed = e.target.closest('.be-ed');
+      if (!ed) return;
+      const sel = window.getSelection();
+      if (!sel.rangeCount || !sel.isCollapsed) return;
+      if (!this._atEnd(ed, sel)) return;
+      if (this._empty(ed)) {
+        e.preventDefault();
+        const nextId = this._idx(id) < this.blocks.length - 1 ? this.blocks[this._idx(id) + 1].id : null;
+        this._remove(id);
+        if (nextId) this._focus(nextId, true);
+      }
+    }
+  }
+
+  // ── Helpers ─────────────────────────────────────
+
+  _idx(id) { return this.blocks.findIndex(b => b.id === id); }
+  _blk(id) { return this.blocks.find(b => b.id === id); }
+
+  _select(id) {
+    this._selId = id;
+    this.cv.querySelectorAll('.be-blk').forEach(el => el.classList.toggle('sel', el.dataset.id === id));
+  }
+
+  _focus(id, toEnd = false) {
+    if (!id) return;
+    const el = this.cv.querySelector(`[data-id="${id}"]`);
+    if (!el) return;
+    const ed = el.querySelector('[contenteditable]');
+    if (ed) {
+      ed.focus();
+      if (toEnd) {
+        const range = document.createRange();
+        range.selectNodeContents(ed);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    }
+  }
+
+  _empty(el) {
+    const text = el.textContent.replace(/\u200B/g, '').trim();
+    const html = el.innerHTML.replace(/<br\s*\/?>/gi, '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    return !text && !html;
+  }
+
+  _atStart(el, sel) {
+    const range = sel.getRangeAt(0);
+    if (range.startOffset !== 0) return false;
+    const pre = document.createRange();
+    pre.setStart(el, 0);
+    pre.setEnd(range.startContainer, range.startOffset);
+    return pre.toString().length === 0;
+  }
+
+  _atEnd(el, sel) {
+    const range = sel.getRangeAt(0);
+    const post = document.createRange();
+    post.setStart(range.endContainer, range.endOffset);
+    post.setEnd(el, el.childNodes.length);
+    return post.toString().length === 0;
+  }
+
+  _updImgPv(bl) {
+    const pv = bl.querySelector('.be-imgpv');
+    const src = bl.querySelector('.be-isrc')?.value;
+    if (src && pv) pv.innerHTML = `<img src="${this._escA(src)}" onerror="this.alt='Non trovata';this.style.opacity=.3">`;
+  }
+
+  _closeDD() { this._addDD.classList.remove('open'); }
+
+  _showDDNear(btn, ib) {
+    this._pendingIns = ib;
+    const rect = btn.getBoundingClientRect();
+    this._addDD.style.position = 'fixed';
+    this._addDD.style.left = rect.left + 'px';
+    this._addDD.style.top = (rect.bottom + 6) + 'px';
+    this._addDD.classList.add('open');
+  }
+
+  _showHTML() {
+    this._hovCode.textContent = this.getHTML();
+    this._hov.style.display = 'flex';
+  }
+
+  _hideHTML() { this._hov.style.display = 'none'; }
+
+  _updCnt() {
+    this._cntEl.textContent = `${this.blocks.length} blocco${this.blocks.length !== 1 ? 'i' : ''}`;
+  }
+
+  _fire() {
+    this._updCnt();
+    if (this.opts.onChange) this.opts.onChange(this.getHTML());
+    this._changeHandlers.forEach(fn => fn(this.getHTML()));
+  }
+
+  _cleanDrag() {
+    this.cv.querySelectorAll('.drag').forEach(el => el.classList.remove('drag'));
+    this.cv.querySelectorAll('.be-dropi').forEach(el => el.remove());
+    this._dragId = null;
+  }
+
+  _escA(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  _escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  _esc(s) { return this._escH(s); }
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  DEMO: Initialize the editor on this page
+// ═══════════════════════════════════════════════════════════
+
+const editor = new BlockEditor('#editor-mount', {
+  name: 'content',
+});
+
+// Handle form submit — show HTML output
+document.getElementById('contentForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const html = editor.getHTML();
+  const area = document.getElementById('outputArea');
+  area.classList.add('show');
+  document.getElementById('outputCode').textContent = html;
+});
+
+// Copy button
+document.getElementById('copyBtn').addEventListener('click', () => {
+  const code = document.getElementById('outputCode').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = 'Copiato!';
+    setTimeout(() => btn.textContent = 'Copia', 1500);
+  });
+});
+
+// Reset button
+document.getElementById('resetBtn').addEventListener('click', () => {
+  editor.clear();
+  document.getElementById('outputArea').classList.remove('show');
+});
+</script>
+</body>
+</html>

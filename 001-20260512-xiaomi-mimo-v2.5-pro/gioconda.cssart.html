@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>La Gioconda — CSS Art</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d0906;
+  --frame: #1a1510;
+  --frame-edge: #2a2218;
+  --skin: #c4a478;
+  --skin-hi: #ccae88;
+  --hair: #1a0e06;
+  --hair-lt: #26180e;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+
+body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: var(--bg);
+  background-image: radial-gradient(ellipse at 50% 45%, rgba(18,14,8,.6) 0%, transparent 75%);
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  overflow: hidden;
+}
+
+/* ── Museum plaque ── */
+body::before {
+  content: 'L A   ·   G I O C O N D A';
+  display: block;
+  color: #6a5a40;
+  font-size: 13px;
+  letter-spacing: .45em;
+  margin-bottom: 30px;
+  font-weight: 300;
+  padding: 8px 22px;
+  border: 1px solid rgba(106,90,64,.12);
+  background: rgba(106,90,64,.025);
+  text-shadow: 0 0 25px rgba(106,90,64,.12);
+}
+body::after {
+  content: 'Leonardo da Vinci  ·  c. 1503–1519  ·  Musée du Louvre';
+  display: block;
+  color: #3a3228;
+  font-size: 11px;
+  letter-spacing: .2em;
+  margin-top: 24px;
+  font-weight: 300;
+  font-style: italic;
+}
+
+/* ════════════════════════════════════════
+   THE PORTRAIT — Frame & Landscape
+   ════════════════════════════════════════ */
+div {
+  position: relative;
+  width: 380px;
+  height: 560px;
+  border-radius: 2px;
+  border: 11px solid var(--frame);
+  transition: transform .8s cubic-bezier(.25,.46,.45,.94), box-shadow .8s ease;
+  box-shadow:
+    inset 0 0 0 1px rgba(160,130,70,.08),
+    inset 0 0 60px rgba(0,0,0,.55),
+    inset 0 0 120px rgba(0,0,0,.18),
+    0 0 0 1.5px var(--frame-edge),
+    0 0 0 5px #0e0a06,
+    0 0 0 7.5px #1a1510,
+    0 0 0 9px var(--frame-edge),
+    0 0 0 9.5px rgba(160,130,70,.06),
+    0 0 120px 15px rgba(0,0,0,.9),
+    0 30px 80px rgba(0,0,0,.5);
+  background:
+    /* Sky warm glow */
+    radial-gradient(ellipse 110% 20% at 42% 16%, #364830 0%, transparent 100%),
+    radial-gradient(ellipse 80% 10% at 56% 21%, rgba(55,50,30,.22) 0%, transparent 100%),
+    /* Mountains */
+    radial-gradient(ellipse 26% 12% at 20% 26%, #222e1e 0%, transparent 100%),
+    radial-gradient(ellipse 16% 8% at 38% 24%, #2a3524 0%, transparent 100%),
+    radial-gradient(ellipse 28% 14% at 78% 22%, #253020 0%, transparent 100%),
+    radial-gradient(ellipse 10% 9% at 90% 20%, #2a3525 0%, transparent 100%),
+    /* Water & bridge */
+    radial-gradient(ellipse 14% 4.5% at 52% 32%, #1e2a1a 0%, transparent 100%),
+    radial-gradient(ellipse 7% 2% at 72% 29%, #2a3522 0%, transparent 100%),
+    /* Hillsides */
+    radial-gradient(ellipse 30% 14% at 12% 37%, #1a2215 0%, transparent 100%),
+    radial-gradient(ellipse 30% 14% at 88% 34%, #1e2518 0%, transparent 100%),
+    /* Body shadow */
+    radial-gradient(ellipse 46% 28% at 50% 80%, #080604 0%, transparent 100%),
+    /* Vignette */
+    radial-gradient(ellipse 62% 58% at 50% 40%, transparent 0%, rgba(4,2,1,.32) 100%),
+    /* Base */
+    linear-gradient(175deg, #2e3828 0%, #1e261c 16%, #14120a 40%, #0a0806 100%);
+}
+div:hover {
+  transform: scale(1.025);
+  box-shadow:
+    inset 0 0 0 1px rgba(160,130,70,.1),
+    inset 0 0 50px rgba(0,0,0,.45),
+    inset 0 0 100px rgba(0,0,0,.12),
+    0 0 0 1.5px var(--frame-edge),
+    0 0 0 5px #0e0a06,
+    0 0 0 7.5px #1a1510,
+    0 0 0 9px var(--frame-edge),
+    0 0 0 9.5px rgba(160,130,70,.08),
+    0 0 140px 20px rgba(0,0,0,.92),
+    0 30px 100px rgba(0,0,0,.55);
+}
+
+/* ════════════════════════════════════════
+   THE FIGURE — Hair · Face · Body · Hands
+   ════════════════════════════════════════ */
+div::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    /* ── HAIR ── */
+    radial-gradient(ellipse 37% 12% at 50% 10%, var(--hair) 0%, var(--hair-lt) 58%, transparent 100%),
+    radial-gradient(ellipse 22% 33% at 30% 26%, var(--hair) 0%, var(--hair-lt) 58%, transparent 100%),
+    radial-gradient(ellipse 22% 33% at 70% 26%, var(--hair) 0%, var(--hair-lt) 58%, transparent 100%),
+    radial-gradient(ellipse 12% 24% at 22% 34%, #14100a 0%, transparent 100%),
+    radial-gradient(ellipse 12% 24% at 78% 34%, #14100a 0%, transparent 100%),
+    radial-gradient(ellipse 4% 14% at 50% 14%, #100a04 0%, transparent 100%),
+    radial-gradient(ellipse 48% 8% at 50% 13%, rgba(22,15,8,.16) 0%, transparent 100%),
+    radial-gradient(ellipse 6% 12% at 36% 20%, rgba(48,34,18,.25) 0%, transparent 100%),
+    radial-gradient(ellipse 6% 12% at 64% 20%, rgba(48,34,18,.25) 0%, transparent 100%),
+
+    /* ── FACE ── */
+    radial-gradient(ellipse 32% 35% at 50% 31.5%, var(--skin) 0%, #b89868 26%, #a08558 56%, transparent 100%),
+    radial-gradient(ellipse 23% 9.5% at 48% 19%, var(--skin-hi) 0%, transparent 80%),
+    radial-gradient(ellipse 7.5% 9.5% at 35.5% 23.5%, rgba(98,73,46,.26) 0%, transparent 100%),
+    radial-gradient(ellipse 7.5% 9.5% at 64.5% 23.5%, rgba(152,122,85,.16) 0%, transparent 100%),
+    radial-gradient(ellipse 9.5% 7.5% at 38% 34.5%, #a48560 0%, transparent 100%),
+    radial-gradient(ellipse 9.5% 7.5% at 62% 34%, #c0a275 0%, transparent 100%),
+    radial-gradient(ellipse 6.5% 3% at 41% 31%, rgba(126,96,66,.16) 0%, transparent 100%),
+    radial-gradient(ellipse 6.5% 3% at 59% 31%, rgba(140,110,78,.12) 0%, transparent 100%),
+    radial-gradient(ellipse 7.5% 5.5% at 37.5% 42%, #a48458 0%, transparent 100%),
+    radial-gradient(ellipse 7.5% 5.5% at 62.5% 42%, #b49468 0%, transparent 100%),
+    radial-gradient(ellipse 6% 4% at 50% 45.5%, #b49468 0%, transparent 100%),
+    radial-gradient(ellipse 13% 2.8% at 50% 48.5%, rgba(70,48,28,.26) 0%, transparent 100%),
+
+    /* ── NECK ── */
+    radial-gradient(ellipse 12% 7.5% at 50% 52.5%, #b09068 0%, #a08460 48%, transparent 100%),
+    radial-gradient(ellipse 4.5% 6.5% at 44% 53%, rgba(86,61,38,.16) 0%, transparent 100%),
+
+    /* ── DRESS ── */
+    radial-gradient(ellipse 32% 7% at 50% 61%, #0e0a06 0%, transparent 100%),
+    radial-gradient(ellipse 18% 12% at 34% 65%, #0c0804 0%, transparent 100%),
+    radial-gradient(ellipse 18% 12% at 66% 65%, #0e0a06 0%, transparent 100%),
+    radial-gradient(ellipse 38% 24% at 50% 77%, #080604 0%, transparent 100%),
+    radial-gradient(ellipse 24% 1.2% at 50% 58.5%, rgba(146,116,66,.09) 0%, transparent 100%),
+    radial-gradient(ellipse 14% 2.2% at 50% 62.5%, rgba(116,91,51,.06) 0%, transparent 100%),
+
+    /* ── HANDS ── */
+    radial-gradient(ellipse 9.5% 4% at 40% 79.5%, #b49470 0%, transparent 100%),
+    radial-gradient(ellipse 7.5% 4% at 60% 78%, #bca078 0%, transparent 100%),
+    radial-gradient(ellipse 11% 1.8% at 40% 81.5%, #aa8a65 0%, transparent 100%),
+    radial-gradient(ellipse 9% 1.8% at 60% 80%, #b49470 0%, transparent 100%),
+    radial-gradient(ellipse 5.5% 3.2% at 40% 77.5%, #b09068 0%, transparent 100%),
+    radial-gradient(ellipse 5.5% 3.2% at 60% 76%, #b89870 0%, transparent 100%),
+    radial-gradient(ellipse 9.5% 8.5% at 36% 72.5%, #0a0806 0%, transparent 100%),
+    radial-gradient(ellipse 9.5% 8.5% at 64% 71.5%, #0c0a06 0%, transparent 100%),
+
+    /* ── ARMREST ── */
+    radial-gradient(ellipse 58% 2.8% at 50% 85%, #14100a 0%, #1a1510 48%, transparent 100%),
+    radial-gradient(ellipse 61% .7% at 50% 86.5%, rgba(30,24,14,.42) 0%, transparent 100%);
+}
+
+/* ════════════════════════════════════════
+   FEATURES — Eyes · Nose · Smile · Sfumato
+   ════════════════════════════════════════ */
+div::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    /* ── EYES ── */
+    radial-gradient(ellipse 6.5% 3.5% at 41.5% 28.2%, rgba(60,40,24,.3) 0%, transparent 100%),
+    radial-gradient(ellipse 6.5% 3.5% at 58.5% 28.2%, rgba(60,40,24,.3) 0%, transparent 100%),
+    radial-gradient(ellipse 5% 2.2% at 41.5% 28.8%, rgba(186,176,156,.52) 0%, transparent 100%),
+    radial-gradient(ellipse 5% 2.2% at 58.5% 28.8%, rgba(186,176,156,.52) 0%, transparent 100%),
+    radial-gradient(circle 1.8px at 41.5% 28.8%, #1a0e06 0%, #2c1c0a 58%, transparent 100%),
+    radial-gradient(circle 1.8px at 58.5% 28.8%, #1a0e06 0%, #2c1c0a 58%, transparent 100%),
+    radial-gradient(circle .8px at 41.5% 28.8%, #060402 0%, transparent 100%),
+    radial-gradient(circle .8px at 58.5% 28.8%, #060402 0%, transparent 100%),
+    radial-gradient(circle .5px at 42.1% 28.5%, rgba(208,190,160,.42) 0%, transparent 100%),
+    radial-gradient(circle .5px at 59.1% 28.5%, rgba(208,190,160,.42) 0%, transparent 100%),
+    /* Eyelids */
+    radial-gradient(ellipse 5.5% 1% at 41.5% 27.2%, rgba(76,52,31,.36) 0%, transparent 100%),
+    radial-gradient(ellipse 5.5% 1% at 58.5% 27.2%, rgba(76,52,31,.36) 0%, transparent 100%),
+    radial-gradient(ellipse 4.5% .6% at 41.5% 29.8%, rgba(130,100,68,.16) 0%, transparent 100%),
+    radial-gradient(ellipse 4.5% .6% at 58.5% 29.8%, rgba(130,100,68,.16) 0%, transparent 100%),
+    /* Eyebrows — barely there, Mona Lisa style */
+    radial-gradient(ellipse 7% .9% at 41.5% 26.1%, rgba(60,40,24,.13) 0%, transparent 100%),
+    radial-gradient(ellipse 7% .9% at 58.5% 26.1%, rgba(60,40,24,.13) 0%, transparent 100%),
+
+    /* ── NOSE ── */
+    radial-gradient(ellipse 1.3% 5.5% at 50% 32.5%, rgba(96,68,42,.2) 0%, transparent 100%),
+    radial-gradient(circle 2.2px at 50% 36.5%, #b49468 0%, transparent 100%),
+    radial-gradient(circle 1px at 49% 37.2%, rgba(60,40,22,.3) 0%, transparent 100%),
+    radial-gradient(circle 1px at 51% 37.2%, rgba(60,40,22,.2) 0%, transparent 100%),
+    radial-gradient(ellipse 2% 2% at 48% 36.8%, rgba(110,80,50,.16) 0%, transparent 100%),
+    radial-gradient(ellipse 2% 2% at 52% 36.8%, rgba(120,90,58,.12) 0%, transparent 100%),
+
+    /* ── THE ENIGMATIC SMILE ── */
+    radial-gradient(ellipse 7.5% 1.3% at 50% 42%, rgba(136,84,66,.4) 0%, transparent 100%),
+    radial-gradient(ellipse 3% .8% at 50% 41.6%, rgba(146,94,74,.3) 0%, transparent 100%),
+    radial-gradient(ellipse 6% 1.8% at 50% 43.3%, rgba(150,90,70,.26) 0%, transparent 100%),
+    radial-gradient(ellipse 9.5% .4% at 50% 42.6%, rgba(80,48,31,.3) 0%, transparent 100%),
+    radial-gradient(circle 1px at 46% 42.4%, rgba(110,68,48,.18) 0%, transparent 100%),
+    radial-gradient(circle 1px at 54% 42.4%, rgba(110,68,48,.18) 0%, transparent 100%),
+    radial-gradient(ellipse 8% 1.3% at 50% 44.3%, rgba(90,58,38,.12) 0%, transparent 100%),
+    radial-gradient(ellipse 4% 2.2% at 50% 46%, rgba(170,136,96,.08) 0%, transparent 100%),
+
+    /* ── SFUMATO ── */
+    radial-gradient(ellipse 32% 36% at 50% 32.5%, rgba(186,156,116,.05) 0%, transparent 100%),
+    radial-gradient(ellipse 17% 4.5% at 50% 28.5%, rgba(166,136,100,.08) 0%, transparent 100%),
+    radial-gradient(ellipse 14% 4% at 50% 42.5%, rgba(156,120,86,.06) 0%, transparent 100%),
+    radial-gradient(ellipse 10% 24% at 30% 32%, rgba(20,12,5,.09) 0%, transparent 100%),
+    radial-gradient(ellipse 10% 24% at 70% 32%, rgba(170,146,110,.04) 0%, transparent 100%),
+    radial-gradient(ellipse 6.5% 16% at 52% 26.5%, rgba(180,150,112,.035) 0%, transparent 100%),
+    /* Age varnish warmth */
+    radial-gradient(ellipse 100% 100% at 50% 50%, rgba(180,150,80,.03) 0%, transparent 100%),
+
+    /* ── CANVAS TEXTURE ── */
+    repeating-linear-gradient(0deg, transparent 0 2.5px, rgba(0,0,0,.012) 2.5px 3.5px),
+    repeating-linear-gradient(90deg, transparent 0 2.5px, rgba(0,0,0,.012) 2.5px 3.5px),
+    /* Craquelure */
+    repeating-linear-gradient(137deg, transparent 0 22px, rgba(0,0,0,.025) 22px 23px, transparent 23px 48px),
+    repeating-linear-gradient(43deg, transparent 0 30px, rgba(0,0,0,.018) 30px 31px, transparent 31px 62px);
+
+  animation: candlelight 10s ease-in-out infinite;
+}
+
+@keyframes candlelight {
+  0%,100% { filter: brightness(1) saturate(1); }
+  30%     { filter: brightness(1.018) saturate(1.02); }
+  60%     { filter: brightness(.982) saturate(.98); }
+  80%     { filter: brightness(1.008) saturate(1.01); }
+}
+</style>
+</head>
+<body>
+  <div></div>
+</body>
+</html>

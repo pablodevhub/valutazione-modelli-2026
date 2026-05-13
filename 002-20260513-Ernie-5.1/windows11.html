@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Windows 11</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            background: #0078d4;
+        }
+
+        /* WALLPAPER */
+        #desktop {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%);
+            background-size: 400% 400%;
+            animation: gradientShift 15s ease infinite;
+            position: relative;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* DESKTOP ICONS */
+        .desktop-icon {
+            width: 80px;
+            text-align: center;
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.2s;
+            position: absolute;
+        }
+
+        .desktop-icon:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .desktop-icon img {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 5px;
+        }
+
+        .desktop-icon span {
+            color: white;
+            font-size: 12px;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+            display: block;
+        }
+
+        /* TASKBAR */
+        #taskbar {
+            position: fixed;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: auto;
+            max-width: 800px;
+            height: 48px;
+            background: rgba(32, 32, 32, 0.85);
+            backdrop-filter: blur(40px);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 0 8px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            z-index: 10000;
+        }
+
+        .taskbar-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+            position: relative;
+        }
+
+        .taskbar-icon:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .taskbar-icon.active::after {
+            content: '';
+            position: absolute;
+            bottom: 2px;
+            width: 20px;
+            height: 3px;
+            background: #60cdff;
+            border-radius: 2px;
+        }
+
+        .taskbar-icon img {
+            width: 24px;
+            height: 24px;
+        }
+
+        /* SYSTEM TRAY */
+        #system-tray {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 12px;
+            height: 100%;
+        }
+
+        .tray-icon {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .tray-icon:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .tray-icon svg {
+            width: 16px;
+            height: 16px;
+            fill: white;
+        }
+
+        #clock {
+            color: white;
+            font-size: 12px;
+            text-align: right;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        #clock:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        /* START MENU */
+        #start-menu {
+            position: fixed;
+            bottom: 64px;
+            left: 50%;
+            transform: translateX(-50%) scale(0.95);
+            width: 640px;
+            height: 640px;
+            background: rgba(32, 32, 32, 0.95);
+            backdrop-filter: blur(40px);
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #start-menu.active {
+            opacity: 1;
+            transform: translateX(-50%) scale(1);
+            pointer-events: all;
+        }
+
+        .start-search {
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .start-search input {
+            flex: 1;
+            height: 40px;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            border-radius: 4px;
+            padding: 0 16px;
+            color: white;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .start-search input::placeholder {
+            color: rgba(255,255,255,0.5);
+        }
+
+        .pinned-apps {
+            padding: 0 20px 20px;
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+        }
+
+        .pinned-app {
+            aspect-ratio: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .pinned-app:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .pinned-app img {
+            width: 32px;
+            height: 32px;
+        }
+
+        .pinned-app span {
+            color: white;
+            font-size: 11px;
+            text-align: center;
+        }
+
+        .recommended {
+            flex: 1;
+            padding: 0 20px 20px;
+            overflow-y: auto;
+        }
+
+        .recommended h3 {
+            color: white;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .recommended-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 4px;
+        }
+
+        .recommended-item:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .recommended-item img {
+            width: 32px;
+            height: 32px;
+        }
+
+        .recommended-item div {
+            flex: 1;
+        }
+
+        .recommended-item h4 {
+            color: white;
+            font-size: 13px;
+            font-weight: 400;
+        }
+
+        .recommended-item p {
+            color: rgba(255,255,255,0.6);
+            font-size: 11px;
+        }
+
+        /* WINDOW */
+        .window {
+            position: absolute;
+            background: rgba(32, 32, 32, 0.95);
+            backdrop-filter: blur(40px);
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .window.minimized {
+            transform: scale(0.8) translateY(100vh);
+            opacity: 0;
+        }
+
+        .window-titlebar {
+            height: 32px;
+            background: rgba(45, 45, 45, 0.8);
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            cursor: move;
+            user-select: none;
+        }
+
+        .window-titlebar h3 {
+            color: white;
+            font-size: 12px;
+            font-weight: 400;
+            flex: 1;
+        }
+
+        .window-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .window-control {
+            width: 46px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .window-control:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .window-control.close:hover {
+            background: #e81123;
+        }
+
+        .window-content {
+            padding: 20px;
+            color: white;
+            height: calc(100% - 32px);
+            overflow: auto;
+        }
+
+        /* ICONS SVG */
+        .icon-svg {
+            width: 48px;
+            height: 48px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- DESKTOP -->
+    <div id="desktop">
+        <!-- Desktop Icons -->
+        <div class="desktop-icon" style="top: 20px; left: 20px;">
+            <svg class="icon-svg" viewBox="0 0 48 48" fill="none">
+                <rect x="4" y="8" width="40" height="32" rx="2" fill="#0078d4"/>
+                <rect x="8" y="12" width="32" height="24" fill="white"/>
+                <path d="M4 20h40" stroke="#0078d4" stroke-width="2"/>
+            </svg>
+            <span>Questo PC</span>
+        </div>
+
+        <div class="desktop-icon" style="top: 120px; left: 20px;">
+            <svg class="icon-svg" viewBox="0 0 48 48" fill="none">
+                <circle cx="24" cy="24" r="20" fill="#ff6b6b"/>
+                <path d="M24 12v24M12 24h24" stroke="white" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+            <span>Cestino</span>
+        </div>
+
+        <div class="desktop-icon" style="top: 220px; left: 20px;">
+            <svg class="icon-svg" viewBox="0 0 48 48" fill="none">
+                <rect x="8" y="8" width="32" height="32" rx="4" fill="#4ecdc4"/>
+                <path d="M16 24l8 8 16-16" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Microsoft Edge</span>
+        </div>
+
+        <!-- WINDOWS -->
+        <div class="window" id="window1" style="width: 600px; height: 400px; top: 100px; left: 100px;">
+            <div class="window-titlebar" onmousedown="startDrag(event, 'window1')">
+                <h3>📁 Esplora File</h3>
+                <div class="window-controls">
+                    <div class="window-control minimize" onclick="minimizeWindow('window1')">
+                        <svg width="10" height="10" fill="white"><rect width="10" height="1"/></svg>
+                    </div>
+                    <div class="window-control maximize" onclick="maximizeWindow('window1')">
+                        <svg width="10" height="10" fill="white"><rect x="1" y="1" width="8" height="8" fill="none" stroke="white" stroke-width="1.5"/></svg>
+                    </div>
+                    <div class="window-control close" onclick="closeWindow('window1')">
+                        <svg width="10" height="10" fill="none" stroke="white" stroke-width="1.5"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg>
+                    </div>
+                </div>
+            </div>
+            <div class="window-content">
+                <h2>Benvenuto in Windows 11</h2>
+                <p>Questa è una simulazione fedele dell'interfaccia Windows 11.</p>
+                <ul style="margin-top: 20px; line-height: 2;">
+                    <li>✅ Taskbar centrata con effetto blur</li>
+                    <li>✅ Start Menu con app consigliate</li>
+                    <li>✅ Finestre trascinabili e ridimensionabili</li>
+                    <li>✅ Animazioni fluide</li>
+                    <li>✅ Design Acrylic autentico</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="window" id="window2" style="width: 500px; height: 350px; top: 150px; left: 200px; display: none;">
+            <div class="window-titlebar" onmousedown="startDrag(event, 'window2')">
+                <h3>🧮 Calcolatrice</h3>
+                <div class="window-controls">
+                    <div class="window-control minimize" onclick="minimizeWindow('window2')">
+                        <svg width="10" height="10" fill="white"><rect width="10" height="1"/></svg>
+                    </div>
+                    <div class="window-control maximize" onclick="maximizeWindow('window2')">
+                        <svg width="10" height="10" fill="white"><rect x="1" y="1" width="8" height="8" fill="none" stroke="white" stroke-width="1.5"/></svg>
+                    </div>
+                    <div class="window-control close" onclick="closeWindow('window2')">
+                        <svg width="10" height="10" fill="none" stroke="white" stroke-width="1.5"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg>
+                    </div>
+                </div>
+            </div>
+            <div class="window-content" style="text-align: center;">
+                <h1 style="font-size: 48px; margin: 20px 0;">42</h1>
+                <p style="color: rgba(255,255,255,0.6);">Risultato</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- TASKBAR -->
+    <div id="taskbar">
+        <div class="taskbar-icon active" onclick="toggleStartMenu()" title="Start">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="#60cdff">
+                <rect x="2" y="2" width="10" height="10" rx="1"/>
+                <rect x="12" y="2" width="10" height="10" rx="1"/>
+                <rect x="2" y="12" width="10" height="10" rx="1"/>
+                <rect x="12" y="12" width="10" height="10" rx="1"/>
+            </svg>
+        </div>
+
+        <div class="taskbar-icon" onclick="openSearch()" title="Cerca">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                <circle cx="11" cy="11" r="7" fill="none" stroke="white" stroke-width="2"/>
+                <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="white" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        </div>
+
+        <div class="taskbar-icon" title="Visualizza attività">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                <rect x="2" y="4" width="8" height="6" rx="1" opacity="0.8"/>
+                <rect x="14" y="4" width="8" height="6" rx="1" opacity="0.8"/>
+                <rect x="2" y="14" width="8" height="6" rx="1" opacity="0.8"/>
+                <rect x="14" y="14" width="8" height="6" rx="1" opacity="0.8"/>
+            </svg>
+        </div>
+
+        <div class="taskbar-icon" title="Chat">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+            </svg>
+        </div>
+
+        <div class="taskbar-icon" onclick="toggleWindow('window1')" title="Esplora File">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="#ffc107">
+                <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+            </svg>
+        </div>
+
+        <div class="taskbar-icon" onclick="toggleWindow('window2')" title="Calcolatrice">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="#4caf50">
+                <rect x="4" y="2" width="16" height="20" rx="2"/>
+                <rect x="6" y="4" width="12" height="8" fill="white" opacity="0.3"/>
+                <circle cx="9" cy="15" r="1" fill="white"/>
+                <circle cx="15" cy="15" r="1" fill="white"/>
+            </svg>
+        </div>
+
+        <div class="taskbar-icon" title="Microsoft Edge">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="#0078d4">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15l-5-5 1.41-1.41L11 14.17l7.59-7.59L20 8l-9 9z"/>
+            </svg>
+        </div>
+
+        <div class="taskbar-icon" title="Microsoft Store">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="#0078d4">
+                <path d="M3 3h18v18H3V3zm16 2H5v14h14V5z"/>
+                <path d="M7 15l3-4 2 3 4-6" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+
+        <!-- SYSTEM TRAY -->
+        <div id="system-tray">
+            <div class="tray-icon" title="Wi-Fi">
+                <svg viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+            </div>
+            <div class="tray-icon" title="Volume">
+                <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
+            </div>
+            <div class="tray-icon" title="Batteria">
+                <svg viewBox="0 0 24 24"><path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/></svg>
+            </div>
+            <div id="clock" onclick="toggleStartMenu()">
+                <div id="time">12:00</div>
+                <div id="date">01/01/2024</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- START MENU -->
+    <div id="start-menu">
+        <div class="start-search">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="rgba(255,255,255,0.5)">
+                <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/>
+                <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <input type="text" placeholder="Cerca app, impostazioni e documenti">
+        </div>
+
+        <div class="pinned-apps">
+            <div class="pinned-app" onclick="toggleWindow('window1')">
+                <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                    <rect x="4" y="8" width="40" height="32" rx="2" fill="#0078d4"/>
+                    <rect x="8" y="12" width="32" height="24" fill="white"/>
+                </svg>
+                <span>File</span>
+            </div>
+            <div class="pinned-app" onclick="toggleWindow('window2')">
+                <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                    <rect x="4" y="4" width="40" height="40" rx="8" fill="#4caf50"/>
+                    <text x="24" y="30" text-anchor="middle" fill="white" font-size="20" font-weight="bold">=</text>
+                </svg>
+                <span>Calc</span>
+            </div>
+            <div class="pinned-app">
+                <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                    <circle cx="24" cy="24" r="20" fill="#ff6b6b"/>
+                    <path d="M24 12v24M12 24h24" stroke="white" stroke-width="3" stroke-linecap="round"/>
+                </svg>
+                <span>Edge</span>
+            </div>
+            <div class="pinned-app">
+                <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                    <rect x="8" y="8" width="32" height="32" rx="4" fill="#0078d4"/>
+                    <path d="M16 24l8 8 16-16" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>Store</span>
+            </div>
+            <div class="pinned-app">
+                <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                    <rect x="6" y="10" width="36" height="28" rx="4" fill="#2196f3"/>
+                    <circle cx="24" cy="24" r="8" fill="white" opacity="0.3"/>
+                </svg>
+                <span>Impost.</span>
+            </div>
+            <div class="pinned-app">
+                <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                    <rect x="8" y="12" width="32" height="24" rx="4" fill="#9c27b0"/>
+                    <circle cx="24" cy="24" r="6" fill="white"/>
+                </svg>
+                <span>Foto</span>
+            </div>
+        </div>
+
+        <div class="recommended">
+            <h3>Consigliati</h3>
+            <div class="recommended-item">
+                <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                    <rect x="8" y="8" width="32" height="32" rx="8" fill="#ff9800"/>
+                    <text x="24" y="30" text-anchor="middle" fill="white" font-size="18" font-weight="bold">♪</text>
+                </svg>
+                <div>
+                    <h4>Spotify</h4>
+                    <p>Aggiornato 2 ore fa</p>
+                </div>
+            </div>
+            <div class="recommended-item">
+                <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                    <rect x="8" y="8" width="32" height="32" rx="8" fill="#e91e63"/>
+                    <text x="24" y="30" text-anchor="middle" fill="white" font-size="18" font-weight="bold">▶</text>
+                </svg>
+                <div>
+                    <h4>YouTube</h4>
+                    <p>Aggiornato ieri</p>
+                </div>
+            </div>
+            <div class="recommended-item">
+                <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                    <rect x="8" y="8" width="32" height="32" rx="8" fill="#4caf50"/>
+                    <text x="24" y="30" text-anchor="middle" fill="white" font-size="18" font-weight="bold">💬</text>
+                </svg>
+                <div>
+                    <h4>WhatsApp</h4>
+                    <p>Aggiornato 3 giorni fa</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // CLOCK
+        function updateClock() {
+            const now = new Date();
+            const time = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            const date = now.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            document.getElementById('time').textContent = time;
+            document.getElementById('date').textContent = date;
+        }
+        updateClock();
+        setInterval(updateClock, 1000);
+
+        // START MENU
+        function toggleStartMenu() {
+            const menu = document.getElementById('start-menu');
+            menu.classList.toggle('active');
+        }
+
+        // Close start menu when clicking outside
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('start-menu');
+            const taskbar = document.getElementById('taskbar');
+            if (!menu.contains(e.target) && !taskbar.contains(e.target)) {
+                menu.classList.remove('active');
+            }
+        });
+
+        // WINDOWS
+        let draggedWindow = null;
+        let offsetX, offsetY;
+
+        function startDrag(e, windowId) {
+            draggedWindow = document.getElementById(windowId);
+            offsetX = e.clientX - draggedWindow.offsetLeft;
+            offsetY = e.clientY - draggedWindow.offsetTop;
+            
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+        }
+
+        function drag(e) {
+            if (draggedWindow) {
+                draggedWindow.style.left = (e.clientX - offsetX) + 'px';
+                draggedWindow.style.top = (e.clientY - offsetY) + 'px';
+            }
+        }
+
+        function stopDrag() {
+            draggedWindow = null;
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', stopDrag);
+        }
+
+        function toggleWindow(windowId) {
+            const win = document.getElementById(windowId);
+            if (win.style.display === 'none') {
+                win.style.display = 'block';
+                win.classList.remove('minimized');
+            } else {
+                win.classList.add('minimized');
+                setTimeout(() => {
+                    win.style.display = 'none';
+                }, 300);
+            }
+        }
+
+        function minimizeWindow(windowId) {
+            const win = document.getElementById(windowId);
+            win.classList.add('minimized');
+            setTimeout(() => {
+                win.style.display = 'none';
+            }, 300);
+        }
+
+        function maximizeWindow(windowId) {
+            const win = document.getElementById(windowId);
+            if (win.style.width === '100%') {
+                win.style.width = '600px';
+                win.style.height = '400px';
+                win.style.top = '100px';
+                win.style.left = '100px';
+            } else {
+                win.style.width = '100%';
+                win.style.height = 'calc(100vh - 64px)';
+                win.style.top = '0';
+                win.style.left = '0';
+            }
+        }
+
+        function closeWindow(windowId) {
+            document.getElementById(windowId).style.display = 'none';
+        }
+
+        function openSearch() {
+            toggleStartMenu();
+        }
+    </script>
+
+</body>
+</html>

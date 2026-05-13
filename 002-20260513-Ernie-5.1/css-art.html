@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Mona Lisa - Pure CSS Art</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: #050505;
+    overflow: hidden;
+  }
+  .mona-lisa {
+    width: 400px;
+    height: 560px;
+    position: relative;
+    background: radial-gradient(ellipse at 50% 30%, #2a2a1a 0%, #1a1a0a 100%);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: inset 0 0 100px rgba(0,0,0,0.8);
+  }
+  .mona-lisa::before, .mona-lisa::after { content: ''; position: absolute; width: 100%; height: 100%; }
+
+  /* ========== PAESAGGIO SFONDO ========== */
+  .mona-lisa {
+    box-shadow:
+      /* Cielo */
+      -200px -180px 0 80px #3a4a3a, -196px -180px 0 80px #3a4a3a, -192px -180px 0 80px #4a5a4a,
+      -188px -180px 0 80px #4a5a4a, -184px -180px 0 80px #3a4a3a, -180px -180px 0 80px #3a4a3a,
+      -176px -180px 0 80px #4a5a4a, -172px -180px 0 80px #4a5a4a, -168px -180px 0 80px #3a4a3a,
+      -164px -180px 0 80px #3a4a3a, -160px -180px 0 80px #3a4a3a, -156px -180px 0 80px #3a4a3a,
+      /* Montagne sinistra */
+      -200px -100px 0 60px #2a3a2a, -196px -100px 0 60px #2a3a2a, -192px -100px 0 60px #3a4a3a,
+      -188px -100px 0 60px #3a4a3a, -184px -100px 0 60px #2a3a2a, -180px -100px 0 60px #2a3a2a,
+      -176px -100px 0 60px #3a4a3a, -172px -100px 0 60px #3a4a3a, -168px -100px 0 60px #2a3a2a,
+      -164px -100px 0 60px #2a3a2a, -160px -100px 0 60px #2a3a2a, -156px -100px 0 60px #2a3a2a,
+      /* Montagne destra */
+      156px -100px 0 60px #2a3a2a, 160px -100px 0 60px #2a3a2a, 164px -100px 0 60px #2a3a2a,
+      168px -100px 0 60px #2a3a2a, 172px -100px 0 60px #3a4a3a, 176px -100px 0 60px #3a4a3a,
+      180px -100px 0 60px #3a4a3a, 184px -100px 0 60px #3a4a3a, 188px -100px 0 60px #2a3a2a,
+      192px -100px 0 60px #2a3a2a, 196px -100px 0 60px #2a3a2a, 200px -100px 0 60px #2a3a2a,
+      /* Valle/acqua */
+      -180px -40px 0 50px #3a4a3a, -176px -40px 0 50px #4a5a4a, -172px -40px 0 50px #4a5a4a,
+      -168px -40px 0 50px #3a4a3a, -164px -40px 0 50px #3a4a3a, -160px -40px 0 50px #3a4a3a,
+      160px -40px 0 50px #3a4a3a, 164px -40px 0 50px #3a4a3a, 168px -40px 0 50px #4a5a4a,
+      172px -40px 0 50px #4a5a4a, 176px -40px 0 50px #3a4a3a, 180px -40px 0 50px #3a4a3a,
+
+      /* ========== CAPELLI ========== */
+      -80px -70px 0 40px #0a0500, -76px -70px 0 40px #0a0500, -72px -70px 0 40px #0a0500,
+      -68px -70px 0 40px #0a0500, -64px -70px 0 40px #1a0a00, -60px -70px 0 40px #1a0a00,
+      -56px -70px 0 40px #1a0a00, -52px -70px 0 40px #1a0a00, -48px -70px 0 40px #0a0500,
+      -44px -70px 0 40px #0a0500, -40px -70px 0 40px #0a0500, -36px -70px 0 40px #0a0500,
+      -84px -60px 0 30px #0a0500, -88px -50px 0 25px #0a0500, -90px -40px 0 22px #1a0a00,
+      -92px -30px 0 20px #1a0a00, -92px -20px 0 18px #2a1a0a, -90px -10px 0 16px #2a1a0a,
+      36px -70px 0 40px #0a0500, 40px -70px 0 40px #0a0500, 44px -70px 0 40px #0a0500,
+      48px -70px 0 40px #0a0500, 52px -70px 0 40px #1a0a00, 56px -70px 0 40px #1a0a00,
+      60px -70px 0 40px #1a0a00, 64px -70px 0 40px #1a0a00, 68px -70px 0 40px #0a0500,
+      72px -70px 0 40px #0a0500, 76px -70px 0 40px #0a0500, 80px -70px 0 40px #0a0500,
+      84px -60px 0 30px #0a0500, 88px -50px 0 25px #0a0500, 90px -40px 0 22px #1a0a00,
+      92px -30px 0 20px #1a0a00, 92px -20px 0 18px #2a1a0a, 90px -10px 0 16px #2a1a0a,
+
+      /* ========== VISO - PELLE ========== */
+      -50px -30px 0 50px #d4a574, -46px -30px 0 50px #d4a574, -42px -30px 0 50px #d4a574,
+      -38px -30px 0 50px #d4a574, -34px -30px 0 50px #d4a574, -30px -30px 0 50px #d4a574,
+      -26px -30px 0 50px #d4a574, -22px -30px 0 50px #d4a574, -18px -30px 0 50px #d4a574,
+      -14px -30px 0 50px #d4a574, -10px -30px 0 50px #d4a574, -6px -30px 0 50px #d4a574,
+      -2px -30px 0 50px #d4a574, 2px -30px 0 50px #d4a574, 6px -30px 0 50px #d4a574,
+      10px -30px 0 50px #d4a574, 14px -30px 0 50px #d4a574, 18px -30px 0 50px #d4a574,
+      22px -30px 0 50px #d4a574, 26px -30px 0 50px #d4a574, 30px -30px 0 50px #d4a574,
+      34px -30px 0 50px #d4a574, 38px -30px 0 50px #d4a574, 42px -30px 0 50px #d4a574,
+      46px -30px 0 50px #d4a574, 50px -30px 0 50px #d4a574,
+      /* Fronte */
+      -40px -38px 0 45px #e4b584, -36px -38px 0 45px #e4b584, -32px -38px 0 45px #e4b584,
+      -28px -38px 0 45px #e4b584, -24px -38px 0 45px #e4b584, -20px -38px 0 45px #e4b584,
+      -16px -38px 0 45px #e4b584, -12px -38px 0 45px #e4b584, -8px -38px 0 45px #e4b584,
+      -4px -38px 0 45px #e4b584, 0px -38px 0 45px #e4b584, 4px -38px 0 45px #e4b584,
+      8px -38px 0 45px #e4b584, 12px -38px 0 45px #e4b584, 16px -38px 0 45px #e4b584,
+      20px -38px 0 45px #e4b584, 24px -38px 0 45px #e4b584, 28px -38px 0 45px #e4b584,
+      32px -38px 0 45px #e4b584, 36px -38px 0 45px #e4b584, 40px -38px 0 45px #e4b584,
+      /* Guance */
+      -54px -15px 0 35px #c49464, -50px -15px 0 35px #c49464, 50px -15px 0 35px #c49464,
+      54px -15px 0 35px #c49464,
+      /* Mascella */
+      -35px 15px 0 30px #c49464, -30px 15px 0 30px #c49464, -25px 15px 0 30px #c49464,
+      25px 15px 0 30px #c49464, 30px 15px 0 30px #c49464, 35px 15px 0 30px #c49464,
+      /* Mento */
+      -15px 35px 0 20px #c49464, -10px 35px 0 20px #c49464, -5px 35px 0 20px #c49464,
+      0px 35px 0 20px #c49464, 5px 35px 0 20px #c49464, 10px 35px 0 20px #c49464,
+      15px 35px 0 20px #c49464,
+
+      /* ========== COLLO ========== */
+      -25px 55px 0 25px #c49464, -20px 55px 0 25px #c49464, -15px 55px 0 25px #c49464,
+      -10px 55px 0 25px #c49464, -5px 55px 0 25px #c49464, 0px 55px 0 25px #c49464,
+      5px 55px 0 25px #c49464, 10px 55px 0 25px #c49464, 15px 55px 0 25px #c49464,
+      20px 55px 0 25px #c49464, 25px 55px 0 25px #c49464,
+
+      /* ========== VESTITO ========== */
+      -70px 80px 0 45px #2a1a0a, -66px 80px 0 45px #2a1a0a, -62px 80px 0 45px #2a1a0a,
+      -58px 80px 0 45px #2a1a0a, -54px 80px 0 45px #3a2a1a, -50px 80px 0 45px #3a2a1a,
+      -46px 80px 0 45px #3a2a1a, -42px 80px 0 45px #3a2a1a, -38px 80px 0 45px #3a2a1a,
+      -34px 80px 0 45px #3a2a1a, -30px 80px 0 45px #3a2a1a, -26px 80px 0 45px #3a2a1a,
+      -22px 80px 0 45px #3a2a1a, -18px 80px 0 45px #3a2a1a, -14px 80px 0 45px #3a2a1a,
+      -10px 80px 0 45px #3a2a1a, -6px 80px 0 45px #3a2a1a, -2px 80px 0 45px #3a2a1a,
+      2px 80px 0 45px #3a2a1a, 6px 80px 0 45px #3a2a1a, 10px 80px 0 45px #3a2a1a,
+      14px 80px 0 45px #3a2a1a, 18px 80px 0 45px #3a2a1a, 22px 80px 0 45px #3a2a1a,
+      26px 80px 0 45px #3a2a1a, 30px 80px 0 45px #3a2a1a, 34px 80px 0 45px #3a2a1a,
+      38px 80px 0 45px #3a2a1a, 42px 80px 0 45px #3a2a1a, 46px 80px 0 45px #3a2a1a,
+      50px 80px 0 45px #3a2a1a, 54px 80px 0 45px #3a2a1a, 58px 80px 0 45px #3a2a1a,
+      62px 80px 0 45px #3a2a1a, 66px 80px 0 45px #3a2a1a, 70px 80px 0 45px #3a2a1a,
+
+      /* ========== MANI ========== */
+      -35px 130px 0 28px #d4a574, -30px 126px 0 30px #d4a574, -25px 122px 0 32px #d4a574,
+      -20px 118px 0 34px #d4a574, -15px 114px 0 36px #d4a574, -10px 110px 0 38px #d4a574,
+      -5px 108px 0 40px #d4a574, 0px 106px 0 42px #d4a574, 5px 108px 0 40px #d4a574,
+      10px 110px 0 38px #d4a574, 15px 114px 0 36px #d4a574, 20px 118px 0 34px #d4a574,
+      25px 122px 0 32px #d4a574, 30px 126px 0 30px #d4a574, 35px 130px 0 28px #d4a574,
+      -15px 140px 0 18px rgba(140,100,60,0.4), 15px 140px 0 18px rgba(140,100,60,0.4);
+  }
+
+  /* ========== OCCHI, NASO, SORRISO ========== */
+  .mona-lisa::before {
+    box-shadow:
+      /* Occhio sinistro */
+      -28px -18px 0 8px #2a1a0a, -26px -20px 0 6px #1a0a00, -24px -18px 0 5px #1a0a00,
+      -22px -16px 0 4px #3a2a1a,
+      /* Occhio destro */
+      22px -18px 0 8px #2a1a0a, 24px -20px 0 6px #1a0a00, 26px -18px 0 5px #1a0a00,
+      28px -16px 0 4px #3a2a1a,
+      /* Riflesso occhi */
+      -26px -19px 0 2px #5a4a3a, 24px -19px 0 2px #5a4a3a,
+      /* Sopracciglia sottili */
+      -32px -28px 0 3px #3a2a1a, -28px -30px 0 3px #3a2a1a, -24px -28px 0 3px #3a2a1a,
+      24px -28px 0 3px #3a2a1a, 28px -30px 0 3px #3a2a1a, 32px -28px 0 3px #3a2a1a,
+      /* Naso */
+      -3px 0px 0 5px #b48454, 1px 4px 0 6px #a47444, 5px 8px 0 5px #b48454,
+      2px 6px 0 4px rgba(160,120,80,0.5),
+      /* IL SORRISO - enigmatico */
+      -16px 20px 0 4px #a07050, -12px 24px 0 5px #906040, -8px 26px 0 6px #805030,
+      -4px 28px 0 7px #7a4a2a, 0px 29px 0 8px #7a4a2a, 4px 28px 0 7px #7a4a2a,
+      8px 26px 0 6px #805030, 12px 24px 0 5px #906040, 16px 20px 0 4px #a07050,
+      /* Luce labbra */
+      -4px 27px 0 2px #c09060, 4px 27px 0 2px #c09060,
+      /* Ombre angoli bocca */
+      -18px 18px 0 4px rgba(100,60,30,0.4), 18px 18px 0 4px rgba(100,60,30,0.4);
+  }
+
+  /* ========== DETTAGLI CAPELLI, VELO, CORNICE ========== */
+  .mona-lisa::after {
+    box-shadow:
+      /* Parte centrale capelli */
+      -3px -74px 0 4px #2a1a0a, 3px -74px 0 4px #2a1a0a,
+      /* Velo */
+      -92px -55px 0 10px #1a1008, -88px -50px 0 10px #1a1008, -84px -45px 0 10px #1a1008,
+      84px -45px 0 10px #1a1008, 88px -50px 0 10px #1a1008, 92px -55px 0 10px #1a1008,
+      /* Scollatura */
+      -55px 72px 0 10px #1a0a00, -45px 68px 0 10px #1a0a00, -35px 64px 0 10px #1a0a00,
+      -25px 60px 0 10px #1a0a00, -15px 56px 0 10px #1a0a00, -5px 52px 0 10px #1a0a00,
+      5px 52px 0 10px #1a0a00, 15px 56px 0 10px #1a0a00, 25px 60px 0 10px #1a0a00,
+      35px 64px 0 10px #1a0a00, 45px 68px 0 10px #1a0a00, 55px 72px 0 10px #1a0a00,
+      /* Cornice dorata */
+      -200px -180px 0 100px #3a2a1a, -196px -180px 0 100px #3a2a1a, -192px -180px 0 100px #4a3a2a,
+      -188px -180px 0 100px #4a3a2a, -184px -180px 0 100px #5a4a3a, -180px -180px 0 100px #5a4a3a,
+      -176px -180px 0 100px #5a4a3a, -172px -180px 0 100px #5a4a3a, -168px -180px 0 100px #5a4a3a,
+      -164px -180px 0 100px #5a4a3a, -160px -180px 0 100px #5a4a3a, -156px -180px 0 100px #5a4a3a,
+      -152px -180px 0 100px #5a4a3a, -148px -180px 0 100px #5a4a3a, -144px -180px 0 100px #5a4a3a,
+      -140px -180px 0 100px #5a4a3a, -136px -180px 0 100px #5a4a3a, -132px -180px 0 100px #5a4a3a,
+      -128px -180px 0 100px #5a4a3a, -124px -180px 0 100px #5a4a3a, -120px -180px 0 100px #5a4a3a,
+      -116px -180px 0 100px #5a4a3a, -112px -180px 0 100px #5a4a3a, -108px -180px 0 100px #5a4a3a,
+      -104px -180px 0 100px #5a4a3a, -100px -180px 0 100px #5a4a3a, -96px -180px 0 100px #5a4a3a,
+      -92px -180px 0 100px #5a4a3a, -88px -180px 0 100px #5a4a3a, -84px -180px 0 100px #5a4a3a,
+      -80px -180px 0 100px #5a4a3a, -76px -180px 0 100px #5a4a3a, -72px -180px 0 100px #5a4a3a,
+      -68px -180px 0 100px #5a4a3a, -64px -180px 0 100px #5a4a3a, -60px -180px 0 100px #5a4a3a,
+      -56px -180px 0 100px #5a4a3a, -52px -180px 0 100px #5a4a3a, -48px -180px 0 100px #5a4a3a,
+      -44px -180px 0 100px #5a4a3a, -40px -180px 0 100px #5a4a3a, -36px -180px 0 100px #5a4a3a,
+      -32px -180px 0 100px #5a4a3a, -28px -180px 0 100px #5a4a3a, -24px -180px 0 100px #5a4a3a,
+      -20px -180px 0 100px #5a4a3a, -16px -180px 0 100px #5a4a3a, -12px -180px 0 100px #5a4a3a,
+      -8px -180px 0 100px #5a4a3a, -4px -180px 0 100px #5a4a3a, 0px -180px 0 100px #5a4a3a,
+      4px -180px 0 100px #5a4a3a, 8px -180px 0 100px #5a4a3a, 12px -180px 0 100px #5a4a3a,
+      16px -180px 0 100px #5a4a3a, 20px -180px 0 100px #5a4a3a, 24px -180px 0 100px #5a4a3a,
+      28px -180px 0 100px #5a4a3a, 32px -180px 0 100px #5a4a3a, 36px -180px 0 100px #5a4a3a,
+      40px -180px 0 100px #5a4a3a, 44px -180px 0 100px #5a4a3a, 48px -180px 0 100px #5a4a3a,
+      52px -180px 0 100px #5a4a3a, 56px -180px 0 100px #5a4a3a, 60px -180px 0 100px #5a4a3a,
+      64px -180px 0 100px #5a4a3a, 68px -180px 0 100px #5a4a3a, 72px -180px 0 100px #5a4a3a,
+      76px -180px 0 100px #5a4a3a, 80px -180px 0 100px #5a4a3a, 84px -180px 0 100px #5a4a3a,
+      88px -180px 0 100px #5a4a3a, 92px -180px 0 100px #5a4a3a, 96px -180px 0 100px #5a4a3a,
+      100px -180px 0 100px #5a4a3a, 104px -180px 0 100px #5a4a3a, 108px -180px 0 100px #5a4a3a,
+      112px -180px 0 100px #5a4a3a, 116px -180px 0 100px #5a4a3a, 120px -180px 0 100px #5a4a3a,
+      124px -180px 0 100px #5a4a3a, 128px -180px 0 100px #5a4a3a, 132px -180px 0 100px #5a4a3a,
+      136px -180px 0 100px #5a4a3a, 140px -180px 0 100px #5a4a3a, 144px -180px 0 100px #5a4a3a,
+      148px -180px 0 100px #5a4a3a, 152px -180px 0 100px #5a4a3a, 156px -180px 0 100px #5a4a3a,
+      160px -180px 0 100px #5a4a3a, 164px -180px 0 100px #5a4a3a, 168px -180px 0 100px #5a4a3a,
+      172px -180px 0 100px #5a4a3a, 176px -180px 0 100px #5a4a3a, 180px -180px 0 100px #5a4a3a,
+      184px -180px 0 100px #5a4a3a, 188px -180px 0 100px #5a4a3a, 192px -180px 0 100px #5a4a3a,
+      196px -180px 0 100px #5a4a3a, 200px -180px 0 100px #5a4a3a,
+      200px 360px 0 100px #3a2a1a, -200px 360px 0 100px #3a2a1a,
+      /* Sfumato - effetto sfumato di Leonardo */
+      -60px -50px 0 60px rgba(212,165,116,0.3), 60px -50px 0 60px rgba(212,165,116,0.3),
+      -60px 40px 0 50px rgba(212,165,116,0.2), 60px 40px 0 50px rgba(212,165,116,0.2);
+  }
+</style>
+</head>
+<body>
+  <div class="mona-lisa"></div>
+</body>
+</html>

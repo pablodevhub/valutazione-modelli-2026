@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulatore di Volo 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000}
+body{font-family:'Share Tech Mono',monospace;color:#ccc}
+canvas{display:block;width:100%;height:100%}
+#hud{position:fixed;top:0;left:0;right:0;padding:20px 28px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:10}
+#mode-label{font-family:'Orbitron',sans-serif;font-size:clamp(18px,3vw,28px);font-weight:900;letter-spacing:5px;text-transform:uppercase;transition:color .3s,text-shadow .3s}
+#mode-label.airplane{color:#ff6b35;text-shadow:0 0 20px rgba(255,107,53,.4)}
+#mode-label.ufo{color:#00ffaa;text-shadow:0 0 20px rgba(0,255,170,.4)}
+.hud-right{text-align:right;font-size:clamp(10px,1.5vw,12px);line-height:2.2;color:#555}
+.hud-right .val{font-size:clamp(12px,1.8vw,14px)}
+.speed{color:#ff6b35}
+.alt{color:#4dc9f6}
+.thr{color:#ffd700}
+#transform-btn{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);font-family:'Orbitron',sans-serif;font-size:clamp(10px,1.5vw,13px);font-weight:700;padding:12px 32px;border:1.5px solid;cursor:pointer;letter-spacing:3px;transition:all .3s ease;pointer-events:all;z-index:10;background:0 0}
+#transform-btn.airplane-mode{border-color:rgba(0,255,170,.5);color:#00ffaa}
+#transform-btn.ufo-mode{border-color:rgba(255,107,53,.5);color:#ff6b35}
+#transform-btn:hover{transform:translateX(-50%) scale(1.05)}
+#transform-btn.airplane-mode:hover{background:rgba(0,255,170,.12);box-shadow:0 0 25px rgba(0,255,170,.2)}
+#transform-btn.ufo-mode:hover{background:rgba(255,107,53,.12);box-shadow:0 0 25px rgba(255,107,53,.2)}
+#controls-hint{position:fixed;bottom:78px;left:50%;transform:translateX(-50%);font-size:clamp(8px,1.2vw,10px);color:#444;text-align:center;pointer-events:none;z-index:10;letter-spacing:1.5px;white-space:nowrap}
+#flash{position:fixed;inset:0;pointer-events:none;z-index:20;opacity:0;transition:opacity .2s ease-out}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+<div><div id="mode-label" class="airplane">AEROPLANO</div></div>
+<div class="hud-right">
+Velocit&agrave; <span class="val speed" id="s-spd">0</span> km/h<br>
+Altitudine <span class="val alt" id="s-alt">0</span> m<br>
+Motore <span class="val thr" id="s-thr">50</span>%
+</div>
+</div>
+<div id="controls-hint">W/S Pitch &middot; A/D Roll &middot; Q/E Yaw &middot; SHIFT/CTRL Motore</div>
+<button id="transform-btn" class="airplane-mode">&#x2B21; TRASFORMA IN UFO</button>
+<div id="flash"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* ===== CONFIG ===== */
+const C={
+  CR:64,CS:256,VR:4,
+  PT:50,PG:15,PL:.30,PLC:30,PDL:.30,PDQ:.003,
+  PP:1.80,PR:2.50,PY:.80,PMV:250,
+  US:80,UV:60,UL:5
+};
+
+/* ===== NOISE ===== */
+class Noise{
+  constructor(seed){
+    const p=[];for(let i=0;i<256;i++)p[i]=i;
+    let s=seed;for(let i=255;i>0;i--){s=(s*16807+13)&0x7fffffff;const j=s%(i+1);[p[i],p[j]]=[p[j],p[i]];}
+    this.p=p.concat(p);
+  }
+  h(x,y){return this.p[(this.p[x&255]+y)&511]/255;}
+  n(x,y){
+    const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy;
+    const u=fx*fx*(3-2*fx),v=fy*fy*(3-2*fy);
+    const a=this.h(ix,iy),b=this.h(ix+1,iy),c=this.h(ix,iy+1),d=this.h(ix+1,iy+1);
+    return(a+u*(b-a)+v*(c-a)+u*v*(a-b-c+d))*2-1;
+  }
+  fbm(x,y,o,l,g){
+    let s=0,a=1,f=1,m=0;
+    for(let i=0;i<o;i++){s+=this.n(x*f,y*f)*a;m+=a;a*=g;f*=l;}
+    return s/m;
+  }
+}
+
+const noise=new Noise(54321);
+
+function H(x,z){
+  let h=noise.fbm(x*.002,z*.002,5,2.1,.48)*120;
+  h+=Math.abs(noise.fbm(x*.007+50,z*.007+50,4,2,.50))*50;
+  return h-30;
+}
+
+function lc(a,b,t){return[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];}
+
+function GC(h,x,z){
+  const v=noise.n(x*.04,z*.04)*.04;
+  let c;
+  if(h<-15)c=[.03,.08,.18];
+  else if(h<0)c=lc([.03,.08,.18],[.50,.42,.22],(h+15)/15);
+  else if(h<25)c=lc([.50,.42,.22],[.10,.30,.06],h/25);
+  else if(h<60)c=lc([.10,.30,.06],[.14,.22,.06],(h-25)/35);
+  else if(h<100)c=lc([.14,.22,.06],[.32,.30,.26],(h-60)/40);
+  else c=lc([.32,.30,.26],[.82,.82,.82],Math.min((h-100)/30,1));
+  return[Math.max(0,Math.min(1,c[0]+v)),Math.max(0,Math.min(1,c[1]+v)),Math.max(0,Math.min(1,c[2]+v))];
+}
+
+/* ===== RENDERER ===== */
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.0;
+
+const scene=new THREE.Scene();
+const BG=0x050510;
+scene.background=new THREE.Color(BG);
+scene.fog=new THREE.FogExp2(BG,.0016);
+
+const camera=new THREE.PerspectiveCamera(65,window.innerWidth/window.innerHeight,1,6000);
+
+scene.add(new THREE.AmbientLight(0x223344,.5));
+const sun=new THREE.DirectionalLight(0xffeedd,.8);
+sun.position.set(300,500,-200);scene.add(sun);
+scene.add(new THREE.HemisphereLight(0x223355,0x1a2211,.4));
+
+/* ===== TERRAIN ===== */
+const chunks=new Map();
+const tMat=new THREE.MeshPhongMaterial({vertexColors:true,flatShading:true,shininess:5});
+
+function mkChunk(cx,cz){
+  const s=C.CR-1;
+  const geo=new THREE.PlaneGeometry(C.CS,C.CS,s,s);
+  geo.rotateX(-Math.PI/2);
+  const pos=geo.attributes.position.array;
+  const n=pos.length/3,col=new Float32Array(n*3);
+  for(let i=0;i<n;i++){
+    const j=i*3,wx=pos[j]+cx*C.CS,wz=pos[j+2]+cz*C.CS;
+    const h=H(wx,wz);pos[j+1]=h;
+    const c=GC(h,wx,wz);col[j]=c[0];col[j+1]=c[1];col[j+2]=c[2];
+  }
+  geo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+  geo.computeVertexNormals();
+  const mesh=new THREE.Mesh(geo,tMat);
+  mesh.position.set(cx*C.CS,0,cz*C.CS);
+  scene.add(mesh);
+  return mesh;
+}
+
+let lx=Infinity,lz=Infinity;
+function updChunks(px,pz){
+  const cx=Math.round(px/C.CS),cz=Math.round(pz/C.CS);
+  if(cx===lx&&cz===lz)return;lx=cx;lz=cz;
+  const need=new Set();
+  for(let dx=-C.VR;dx<=C.VR;dx++)for(let dz=-C.VR;dz<=C.VR;dz++){
+    if(dx*dx+dz*dz>C.VR*C.VR+1)continue;
+    const k=(cx+dx)+','+(cz+dz);need.add(k);
+    if(!chunks.has(k))chunks.set(k,mkChunk(cx+dx,cz+dz));
+  }
+  for(const[k,m]of chunks)if(!need.has(k)){scene.remove(m);m.geometry.dispose();chunks.delete(k);}
+}
+
+/* ===== WATER ===== */
+const wG=new THREE.PlaneGeometry(1e4,1e4);wG.rotateX(-Math.PI/2);
+const water=new THREE.Mesh(wG,new THREE.MeshPhongMaterial({color:0x002244,transparent:true,opacity:.6,shininess:100,specular:0x336688}));
+water.position.y=-12;scene.add(water);
+
+/* ===== STARS ===== */
+const sp=new Float32Array(3e3*3);
+for(let i=0;i<3e3;i++){
+  const t=Math.random()*Math.PI*2,p=Math.acos(Math.random()*.7+.3),r=2500;
+  sp[i*3]=r*Math.sin(p)*Math.cos(t);sp[i*3+1]=r*Math.cos(p);sp[i*3+2]=r*Math.sin(p)*Math.sin(t);
+}
+const sG=new THREE.BufferGeometry();sG.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
+const stars=new THREE.Points(sG,new THREE.PointsMaterial({color:0xffffff,size:1.5,sizeAttenuation:true}));
+scene.add(stars);
+
+/* ===== AIRPLANE ===== */
+function buildPlane(){
+  const g=new THREE.Group();
+  const m=c=>new THREE.MeshPhongMaterial({color:c,shininess:60});
+  let mesh;
+
+  const fG=new THREE.CylinderGeometry(.35,.22,5,8);fG.rotateX(Math.PI/2);
+  mesh=new THREE.Mesh(fG,m(0xdddddd));g.add(mesh);
+
+  const cG=new THREE.SphereGeometry(.38,8,6,0,Math.PI*2,0,Math.PI/2);
+  mesh=new THREE.Mesh(cG,new THREE.MeshPhongMaterial({color:0x4488cc,transparent:true,opacity:.6,shininess:100}));
+  mesh.position.set(0,.28,-1);mesh.scale.set(1,.8,1.5);g.add(mesh);
+
+  mesh=new THREE.Mesh(new THREE.BoxGeometry(10,.08,1.8),m(0xcccccc));
+  mesh.position.set(0,-.08,.3);g.add(mesh);
+
+  mesh=new THREE.Mesh(new THREE.BoxGeometry(3.5,.06,.8),m(0xcccccc));
+  mesh.position.set(0,.08,2.3);g.add(mesh);
+
+  mesh=new THREE.Mesh(new THREE.BoxGeometry(.06,1.5,.8),m(0xcccccc));
+  mesh.position.set(0,.75,2.3);g.add(mesh);
+
+  const nG=new THREE.ConeGeometry(.35,1.2,8);nG.rotateX(-Math.PI/2);
+  mesh=new THREE.Mesh(nG,m(0xff4422));mesh.position.set(0,0,-3.1);g.add(mesh);
+
+  for(let s=-1;s<=1;s+=2){
+    const eG=new THREE.CylinderGeometry(.18,.15,1.2,8);eG.rotateX(Math.PI/2);
+    mesh=new THREE.Mesh(eG,m(0x888888));mesh.position.set(s*2.5,-.3,.3);g.add(mesh);
+  }
+
+  // Propeller
+  const prop=new THREE.Mesh(new THREE.BoxGeometry(2.2,.04,.12),m(0x555555));
+  prop.position.set(0,0,-3.7);g.add(prop);
+  g.userData.prop=prop;
+
+  return g;
+}
+
+/* ===== UFO ===== */
+function buildUFO(){
+  const g=new THREE.Group();
+
+  const disc=new THREE.Mesh(new THREE.SphereGeometry(3,32,12),new THREE.MeshPhongMaterial({color:0x8888aa,emissive:0x111122,shininess:90}));
+  disc.scale.y=.2;g.add(disc);
+
+  const dome=new THREE.Mesh(new THREE.SphereGeometry(1.2,24,12,0,Math.PI*2,0,Math.PI*.5),new THREE.MeshPhongMaterial({color:0x00ffbb,emissive:0x009966,transparent:true,opacity:.5,shininess:100}));
+  dome.position.y=.35;g.add(dome);
+
+  const bot=new THREE.Mesh(new THREE.CylinderGeometry(2.5,1.5,.6,32),new THREE.MeshPhongMaterial({color:0x555566,emissive:0x001122}));
+  bot.position.y=-.25;g.add(bot);
+
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(2.2,.25,8,32),new THREE.MeshPhongMaterial({color:0x666677,emissive:0x111122}));
+  ring.rotation.x=Math.PI/2;ring.position.y=-.15;g.add(ring);
+
+  const lights=[];
+  for(let i=0;i<12;i++){
+    const a=(i/12)*Math.PI*2;
+    const lm=new THREE.MeshBasicMaterial({color:0x00ffaa});
+    const l=new THREE.Mesh(new THREE.SphereGeometry(.12,6,6),lm);
+    l.position.set(Math.cos(a)*2.5,-.15,Math.sin(a)*2.5);g.add(l);lights.push(l);
+  }
+
+  const glow=new THREE.Mesh(new THREE.ConeGeometry(2.5,10,16,1,true),new THREE.MeshBasicMaterial({color:0x00ffaa,transparent:true,opacity:.04,side:THREE.DoubleSide,depthWrite:false}));
+  glow.position.y=-5.5;g.add(glow);
+
+  const pLight=new THREE.PointLight(0x00ffaa,.8,40);
+  pLight.position.set(0,-2,0);g.add(pLight);
+
+  g.userData={lights,glow};
+  return g;
+}
+
+/* ===== STATE ===== */
+let isUFO=false,throttle=.5,ufoYaw=0;
+const pV=new THREE.Vector3(0,0,-50),uV=new THREE.Vector3();
+const keys={};
+const plane=buildPlane();plane.position.set(0,120,0);scene.add(plane);
+const ufo=buildUFO();ufo.visible=false;scene.add(ufo);
+const camP=new THREE.Vector3(0,125,14),camL=new THREE.Vector3(0,120,0);
+
+/* ===== INPUT ===== */
+const prev=new Set(['Space','ShiftLeft','ShiftRight','ControlLeft','ControlRight','KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE']);
+document.addEventListener('keydown',e=>{keys[e.code]=true;if(prev.has(e.code))e.preventDefault();});
+document.addEventListener('keyup',e=>{keys[e.code]=false;});
+
+/* ===== PLANE PHYSICS ===== */
+function updPlane(dt){
+  const pi=(keys.KeyS?1:0)-(keys.KeyW?1:0);
+  const ri=(keys.KeyA?1:0)-(keys.KeyD?1:0);
+  const yi=(keys.KeyQ?1:0)-(keys.KeyE?1:0);
+  if(keys.ShiftLeft||keys.ShiftRight)throttle=Math.min(1,throttle+dt*.4);
+  if(keys.ControlLeft||keys.ControlRight)throttle=Math.max(0,throttle-dt*.4);
+
+  const fwd=new THREE.Vector3(0,0,-1).applyQuaternion(plane.quaternion);
+  const up=new THREE.Vector3(0,1,0).applyQuaternion(plane.quaternion);
+  const rgt=new THREE.Vector3(1,0,0).applyQuaternion(plane.quaternion);
+
+  const pq=new THREE.Quaternion().setFromAxisAngle(rgt,pi*C.PP*dt);
+  const rq=new THREE.Quaternion().setFromAxisAngle(fwd,ri*C.PR*dt);
+  const yq=new THREE.Quaternion().setFromAxisAngle(up,yi*C.PY*dt);
+  plane.quaternion.premultiply(pq).premultiply(rq).premultiply(yq).normalize();
+
+  // Auto-level (subtle)
+  const euler=new THREE.Euler().setFromQuaternion(plane.quaternion,'YXZ');
+  const rc=-euler.z*.3*dt;
+  if(Math.abs(rc)>1e-4){
+    const rcq=new THREE.Quaternion().setFromAxisAngle(fwd,rc);
+    plane.quaternion.premultiply(rcq);
+  }
+
+  const spd=pV.length();
+  const thr=fwd.clone().multiplyScalar(throttle*C.PT);
+  const grav=new THREE.Vector3(0,-C.PG,0);
+  const lift=up.clone().multiplyScalar(Math.min(spd*C.PL,C.PLC));
+  const drag=spd>.1?pV.clone().normalize().multiplyScalar(-(spd*C.PDL+spd*spd*C.PDQ)):new THREE.Vector3();
+
+  pV.add(thr.add(grav).add(lift).add(drag).multiplyScalar(dt));
+  if(pV.length()>C.PMV)pV.normalize().multiplyScalar(C.PMV);
+
+  plane.position.add(pV.clone().multiplyScalar(dt));
+
+  const gh=H(plane.position.x,plane.position.z);
+  if(plane.position.y<gh+3){plane.position.y=gh+3;if(pV.y<0)pV.y*=-.3;pV.x*=.97;pV.z*=.97;}
+
+  // Propeller spin
+  if(plane.userData.prop)plane.userData.prop.rotation.z+=throttle*40*dt;
+}
+
+/* ===== UFO PHYSICS ===== */
+function updUFO(dt){
+  const yi=(keys.KeyQ?1:0)-(keys.KeyE?1:0);
+  ufoYaw-=yi*2*dt;
+
+  const fwd=new THREE.Vector3(-Math.sin(ufoYaw),0,-Math.cos(ufoYaw));
+  const rgt=new THREE.Vector3(Math.cos(ufoYaw),0,-Math.sin(ufoYaw));
+
+  const md=new THREE.Vector3();
+  if(keys.KeyW)md.add(fwd);if(keys.KeyS)md.sub(fwd);
+  if(keys.KeyD)md.add(rgt);if(keys.KeyA)md.sub(rgt);
+  if(md.length()>0)md.normalize();
+
+  const tv=md.multiplyScalar(C.US);
+  if(keys.Space)tv.y=C.UV;
+  else if(keys.ShiftLeft||keys.ShiftRight)tv.y=-C.UV;
+  else tv.y=uV.y*.92;
+
+  const lf=1-Math.pow(.0005,dt*C.UL);
+  uV.lerp(tv,lf);
+  ufo.position.add(uV.clone().multiplyScalar(dt));
+
+  // Tilt
+  const sh=Math.sqrt(uV.x*uV.x+uV.z*uV.z);
+  const mt=Math.min(sh/C.US,1)*.35;
+  const va=Math.atan2(-uV.x,-uV.z),ra=va-ufoYaw;
+  const tq=new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.cos(ra)*mt,ufoYaw,Math.sin(ra)*mt,'YXZ'));
+  ufo.quaternion.slerp(tq,.1);
+
+  // Lights
+  const time=performance.now()*.001;
+  ufo.userData.lights.forEach((l,i)=>{
+    const t=(time*3+i*.524)%(Math.PI*2);
+    l.material.color.setHSL(.42+Math.sin(t)*.08,1,.5+Math.sin(t*1.7)*.15);
+  });
+  ufo.userData.glow.material.opacity=.03+Math.sin(time*2)*.015;
+
+  const gh=H(ufo.position.x,ufo.position.z);
+  if(ufo.position.y<gh+4){ufo.position.y=gh+4;uV.y=Math.max(uV.y,0);}
+}
+
+/* ===== CAMERA ===== */
+function updCam(){
+  const v=isUFO?ufo:plane;
+  const euler=new THREE.Euler().setFromQuaternion(v.quaternion,'YXZ');
+  let des;
+  if(isUFO){
+    const off=new THREE.Vector3(0,10,22);
+    off.applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),euler.y));
+    des=v.position.clone().add(off);
+  }else{
+    euler.z=0;
+    const off=new THREE.Vector3(0,3.5,14);
+    off.applyQuaternion(new THREE.Quaternion().setFromEuler(euler));
+    des=v.position.clone().add(off);
+  }
+  camP.lerp(des,isUFO?.06:.05);
+  const cgh=H(camP.x,camP.z);if(camP.y<cgh+2)camP.y=cgh+2;
+  camera.position.copy(camP);
+  const la=new THREE.Vector3(0,0,-8).applyQuaternion(v.quaternion);
+  camL.lerp(v.position.clone().add(la),.08);
+  camera.lookAt(camL);
+}
+
+/* ===== TRANSFORM ===== */
+const btn=document.getElementById('transform-btn');
+const flash=document.getElementById('flash');
+const modeL=document.getElementById('mode-label');
+const hint=document.getElementById('controls-hint');
+
+function transform(){
+  isUFO=!isUFO;
+  flash.style.background=isUFO?'#00ffaa':'#ff6b35';
+  flash.style.opacity='.6';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>flash.style.opacity='0'));
+
+  if(isUFO){
+    ufo.position.copy(plane.position);
+    const euler=new THREE.Euler().setFromQuaternion(plane.quaternion,'YXZ');
+    ufoYaw=euler.y;uV.copy(pV);
+    ufo.visible=true;plane.visible=false;
+    modeL.textContent='UFO';modeL.className='ufo';
+    btn.innerHTML='&#x25C6; TRASFORMA IN AEROPLANO';btn.className='ufo-mode';
+    hint.textContent='W/S Avanza \u00b7 A/D Strisciata \u00b7 Q/E Yaw \u00b7 SPAZIO Ascendi \u00b7 SHIFT Discendi';
+  }else{
+    plane.position.copy(ufo.position);
+    plane.quaternion.setFromAxisAngle(new THREE.Vector3(0,1,0),ufoYaw);
+    pV.copy(uV);
+    if(pV.length()<20){const f=new THREE.Vector3(0,0,-1).applyQuaternion(plane.quaternion);pV.copy(f.multiplyScalar(50));}
+    plane.visible=true;ufo.visible=false;
+    modeL.textContent='AEROPLANO';modeL.className='airplane';
+    btn.innerHTML='&#x2B21; TRASFORMA IN UFO';btn.className='airplane-mode';
+    hint.textContent='W/S Pitch \u00b7 A/D Roll \u00b7 Q/E Yaw \u00b7 SHIFT/CTRL Motore';
+  }
+}
+btn.addEventListener('click',transform);
+document.addEventListener('keydown',e=>{if(e.code==='KeyT')transform();});
+
+/* ===== UI ===== */
+const sSpd=document.getElementById('s-spd');
+const sAlt=document.getElementById('s-alt');
+const sThr=document.getElementById('s-thr');
+function updUI(){
+  const v=isUFO?ufo:plane,vel=isUFO?uV:pV;
+  sSpd.textContent=Math.round(vel.length()*3.6);
+  sAlt.textContent=Math.round(v.position.y);
+  sThr.textContent=isUFO?Math.round(Math.min(uV.length()/C.US,1)*100):Math.round(throttle*100);
+}
+
+/* ===== RESIZE ===== */
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+/* ===== LOOP ===== */
+let lt=performance.now();
+updChunks(0,0);
+
+(function loop(){
+  requestAnimationFrame(loop);
+  const now=performance.now(),dt=Math.min((now-lt)/1e3,.05);lt=now;
+
+  if(isUFO)updUFO(dt);else updPlane(dt);
+  updCam();
+
+  const v=isUFO?ufo:plane;
+  updChunks(v.position.x,v.position.z);
+  water.position.x=v.position.x;water.position.z=v.position.z;
+  stars.position.x=v.position.x;stars.position.z=v.position.z;
+
+  updUI();
+  renderer.render(scene,camera);
+})();
+
+})();
+</script>
+</body>
+</html>

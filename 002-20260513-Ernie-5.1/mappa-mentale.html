@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mind Map Creator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;
+  --accent:#58a6ff;--accent2:#3fb950;--danger:#f85149;--warn:#d29922;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;height:100vh;display:flex;flex-direction:column}
+
+/* TOOLBAR */
+#toolbar{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;gap:10px;align-items:center;z-index:100;flex-shrink:0}
+#toolbar button{background:var(--accent);color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:600;transition:.2s}
+#toolbar button:hover{opacity:.85;transform:translateY(-1px)}
+#toolbar button.secondary{background:var(--surface);border:1px solid var(--border);color:var(--text)}
+#toolbar button.danger{background:var(--danger)}
+#toolbar span{color:var(--border);font-size:12px;margin-left:auto}
+
+/* CANVAS */
+#mapCanvas{flex:1;position:relative;overflow:auto;cursor:grab}
+#mapCanvas:active{cursor:grabbing}
+#mapCanvas.dragging{cursor:grabbing}
+#svgOverlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1}
+.connection{fill:none;stroke:var(--accent);stroke-width:2.5;opacity:.6;filter:drop-shadow(0 0 4px rgba(88,166,255,.3))}
+
+/* NODE */
+.node{position:absolute;min-width:140px;max-width:280px;background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:12px 14px;cursor:grab;z-index:10;transition:box-shadow .2s,border-color .2s;user-select:none}
+.node:hover{border-color:var(--accent);box-shadow:0 0 20px rgba(88,166,255,.15)}
+.node.dragging{cursor:grabbing;z-index:50;box-shadow:0 8px 30px rgba(0,0,0,.5);border-color:var(--accent)}
+.node.has-note{border-color:var(--warn)}
+.nodeHeader{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.nodeColor{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:2px solid rgba(255,255,255,.2)}
+.nodeName{font-size:14px;font-weight:600;flex:1;outline:none;word-break:break-word;background:transparent;border:none;color:var(--text);min-width:60px}
+.nodeName:focus{color:var(--accent)}
+.noteIcon{font-size:16px;cursor:pointer;transition:transform .2s;flex-shrink:0;position:relative}
+.noteIcon:hover{transform:scale(1.3)}
+.noteIcon .tooltip{display:none;position:absolute;bottom:120%;left:50%;transform:translateX(-50%);background:#000;color:#fff;padding:4px 8px;border-radius:4px;font-size:11px;white-space:nowrap;z-index:100}
+.noteIcon:hover .tooltip{display:block}
+
+.nodeActions{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
+.nodeActions button{background:rgba(255,255,255,.08);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;transition:.2s}
+.nodeActions button:hover{background:rgba(255,255,255,.15);border-color:var(--accent)}
+.nodeActions button.add-child{background:rgba(63,185,80,.15);border-color:var(--accent2);color:var(--accent2)}
+.nodeActions button.add-child:hover{background:rgba(63,185,80,.3)}
+.nodeActions button.del{background:rgba(248,81,73,.15);border-color:var(--danger);color:var(--danger)}
+.nodeActions button.del:hover{background:rgba(248,81,73,.3)}
+
+.nodeImageContainer{margin-top:8px;position:relative;display:inline-block}
+.nodeImage{max-width:100%;border-radius:8px;display:block;transition:width .2s,height .2s}
+.resizeHandle{position:absolute;bottom:-4px;right:-4px;width:14px;height:14px;background:var(--accent);border:2px solid var(--bg);border-radius:50%;cursor:nwse-resize;z-index:20;opacity:0;transition:opacity .2s}
+.nodeImageContainer:hover .resizeHandle{opacity:1}
+
+/* NOTE MODAL */
+#noteModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+#noteModal.show{display:flex}
+#noteModal .modalContent{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;width:400px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+#noteModal h3{margin-bottom:12px;color:var(--accent)}
+#noteModal textarea{width:100%;height:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:12px;font-size:14px;resize:vertical;outline:none;font-family:inherit}
+#noteModal textarea:focus{border-color:var(--accent)}
+#noteModal .modalActions{display:flex;gap:8px;margin-top:12px;justify-content:flex-end}
+#noteModal .modalActions button{padding:8px 20px;border-radius:8px;border:none;cursor:pointer;font-weight:600;font-size:14px}
+#noteModal .btnSave{background:var(--accent);color:#fff}
+#noteModal .btnDelete{background:var(--danger);color:#fff}
+#noteModal .btnCancel{background:var(--border);color:var(--text)}
+
+/* COLOR PICKER */
+#colorPicker{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
+#colorPicker.show{display:flex}
+#colorPicker .pickerContent{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+#colorPicker h3{margin-bottom:12px}
+#colorPicker .colors{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+#colorPicker .colorSwatch{width:40px;height:40px;border-radius:8px;cursor:pointer;border:3px solid transparent;transition:.2s}
+#colorPicker .colorSwatch:hover{transform:scale(1.1);border-color:#fff}
+#colorPicker .closeBtn{margin-top:12px;width:100%;padding:8px;background:var(--border);border:none;border-radius:8px;color:var(--text);cursor:pointer;font-weight:600}
+
+/* ANIMATIONS */
+@keyframes nodeAppear{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+.node{animation:nodeAppear .3s ease-out}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(88,166,255,.4)}50%{box-shadow:0 0 0 8px rgba(88,166,255,0)}}
+.noteIcon{animation:pulse 2s infinite}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#484f58}
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <button onclick="addRootNode()">➕ Nuovo Nodo Radice</button>
+  <button class="secondary" onclick="autoLayout()">🔄 Auto Layout</button>
+  <button class="secondary" onclick="clearAll()">🗑️ Cancella Tutto</button>
+  <button onclick="saveAsImage()">💾 Salva come Immagine</button>
+  <span>Trascina i nodi per spostarli • Click su 📝 per note • Doppio-click sul nome per modificare</span>
+</div>
+
+<div id="mapCanvas">
+  <svg id="svgOverlay"></svg>
+</div>
+
+<div id="noteModal">
+  <div class="modalContent">
+    <h3>📝 Nota del Nodo</h3>
+    <textarea id="noteText" placeholder="Scrivi la tua nota qui..."></textarea>
+    <div class="modalActions">
+      <button class="btnCancel" onclick="closeNoteModal()">Annulla</button>
+      <button class="btnDelete" id="deleteNoteBtn" onclick="deleteNote()">Elimina Nota</button>
+      <button class="btnSave" onclick="saveNote()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<div id="colorPicker">
+  <div class="pickerContent">
+    <h3>🎨 Scegli Colore</h3>
+    <div class="colors" id="colorSwatches"></div>
+    <button class="closeBtn" onclick="closeColorPicker()">Chiudi</button>
+  </div>
+</div>
+
+<script>
+const COLORS = [
+  '#f85149','#d29922','#3fb950','#58a6ff','#bc8cff','#f778ba',
+  '#79c0ff','#56d364','#e3b341','#ff7b72','#7ee787','#79c0ff',
+  '#d2a8ff','#ffa657','#76e3ea','#f0883e','#a5d6ff','#d7a8ff'
+];
+
+let nodes = {};
+let nodeIdCounter = 0;
+let currentNoteNodeId = null;
+let currentColorNodeId = null;
+let draggedNode = null;
+let dragOffset = {x:0, y:0};
+let isPanning = false;
+let panStart = {x:0, y:0};
+let canvasOffset = {x:0, y:0};
+
+const mapCanvas = document.getElementById('mapCanvas');
+const svgOverlay = document.getElementById('svgOverlay');
+
+// Initialize color swatches
+const swatchContainer = document.getElementById('colorSwatches');
+COLORS.forEach(c => {
+  const div = document.createElement('div');
+  div.className = 'colorSwatch';
+  div.style.background = c;
+  div.onclick = () => { applyColor(currentColorNodeId, c); closeColorPicker(); };
+  swatchContainer.appendChild(div);
+});
+
+function generateId() { return 'node_' + (++nodeIdCounter); }
+
+function addRootNode() {
+  const id = generateId();
+  const canvasRect = mapCanvas.getBoundingClientRect();
+  const x = (canvasRect.width / 2) - 100 + canvasOffset.x;
+  const y = (canvasRect.height / 2) - 30 + canvasOffset.y;
+  
+  nodes[id] = {
+    id, name: 'Nuovo Nodo', x, y, color: '#58a6ff',
+    note: '', image: null, imageW: 0, imageH: 0,
+    children: [], parent: null
+  };
+  renderNode(id);
+  updateConnections();
+}
+
+function renderNode(id) {
+  const n = nodes[id];
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = id;
+    el.className = 'node' + (n.note ? ' has-note' : '');
+    mapCanvas.appendChild(el);
+    
+    el.addEventListener('mousedown', (e) => onNodeMouseDown(e, id));
+    el.addEventListener('dblclick', (e) => { if(e.target.classList.contains('nodeName')) { e.target.focus(); e.target.select(); }});
+  }
+  
+  el.style.left = n.x + 'px';
+  el.style.top = n.y + 'px';
+  el.style.borderColor = n.color;
+  el.style.boxShadow = `0 0 15px ${n.color}33`;
+  
+  let html = `<div class="nodeHeader">
+    <div class="nodeColor" style="background:${n.color}"></div>
+    <input class="nodeName" value="${escapeHtml(n.name)}" 
+      onchange="updateNodeName('${id}', this.value)"
+      onclick="event.stopPropagation()"
+      onfocus="this.select()" />`;
+  
+  if (n.note) {
+    html += `<div class="noteIcon" onclick="event.stopPropagation(); openNoteModal('${id}')">
+      📝<span class="tooltip">Click per vedere/modificare</span>
+    </div>`;
+  }
+  
+  html += `</div><div class="nodeActions">
+    <button class="add-child" onclick="event.stopPropagation(); addChild('${id}')">➕ Figlio</button>
+    <button onclick="event.stopPropagation(); openColorPicker('${id}')">🎨 Colore</button>
+    <button onclick="event.stopPropagation(); addImage('${id}')">🖼️ Immagine</button>
+    <button class="del" onclick="event.stopPropagation(); deleteNode('${id}')">🗑️</button>
+  </div>`;
+  
+  if (n.image) {
+    html += `<div class="nodeImageContainer" id="imgContainer_${id}">
+      <img class="nodeImage" src="${n.image}" style="width:${n.imageW}px;height:${n.imageH}px" draggable="false" />
+      <div class="resizeHandle" data-node="${id}"></div>
+    </div>`;
+  }
+  
+  el.innerHTML = html;
+  
+  // Image resize handle
+  const handle = el.querySelector('.resizeHandle');
+  if (handle) {
+    handle.addEventListener('mousedown', (e) => startResize(e, id));
+  }
+  
+  // Note icon click on node body
+  el.addEventListener('click', (e) => {
+    if (n.note && !e.target.closest('.nodeActions') && !e.target.closest('.noteIcon')) {
+      openNoteModal(id);
+    }
+  });
+}
+
+function escapeHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function updateNodeName(id, name) {
+  if (nodes[id]) nodes[id].name = name;
+}
+
+function addChild(parentId) {
+  const parent = nodes[parentId];
+  if (!parent) return;
+  
+  const id = generateId();
+  const canvasRect = mapCanvas.getBoundingClientRect();
+  const offsetX = 220 + Math.random() * 60;
+  const offsetY = (Math.random() - 0.5) * 100;
+  
+  nodes[id] = {
+    id, name: 'Nuovo Figlio', 
+    x: parent.x + offsetX, 
+    y: parent.y + offsetY,
+    color: parent.color,
+    note: '', image: null, imageW: 0, imageH: 0,
+    children: [], parent: parentId
+  };
+  parent.children.push(id);
+  renderNode(id);
+  updateConnections();
+}
+
+function deleteNode(id) {
+  const n = nodes[id];
+  if (!n) return;
+  
+  // Delete all children recursively
+  function deleteRecursive(nodeId) {
+    const node = nodes[nodeId];
+    if (!node) return;
+    [...node.children].forEach(cid => deleteRecursive(cid));
+    const el = document.getElementById(nodeId);
+    if (el) el.remove();
+    delete nodes[nodeId];
+  }
+  
+  // Remove from parent
+  if (n.parent && nodes[n.parent]) {
+    nodes[n.parent].children = nodes[n.parent].children.filter(c => c !== id);
+  }
+  
+  deleteRecursive(id);
+  updateConnections();
+}
+
+function clearAll() {
+  if (!confirm('Sei sicuro di voler cancellare tutta la mappa?')) return;
+  Object.keys(nodes).forEach(id => { const el = document.getElementById(id); if (el) el.remove(); });
+  nodes = {};
+  nodeIdCounter = 0;
+  updateConnections();
+}
+
+function updateConnections() {
+  svgOverlay.innerHTML = '';
+  Object.values(nodes).forEach(n => {
+    n.children.forEach(childId => {
+      const child = nodes[childId];
+      if (!child) return;
+      
+      const parentEl = document.getElementById(n.id);
+      const childEl = document.getElementById(child.id);
+      if (!parentEl || !childEl) return;
+      
+      const px = n.x + parentEl.offsetWidth;
+      const py = n.y + parentEl.offsetHeight / 2;
+      const cx = child.x;
+      const cy = child.y + childEl.offsetHeight / 2;
+      
+      const mx = (px + cx) / 2;
+      
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M ${px} ${py} C ${mx} ${py}, ${mx} ${cy}, ${cx} ${cy}`);
+      path.setAttribute('class', 'connection');
+      svgOverlay.appendChild(path);
+    });
+  });
+}
+
+// DRAG NODES
+function onNodeMouseDown(e, id) {
+  if (e.target.closest('.nodeActions') || e.target.closest('.resizeHandle') || e.target.classList.contains('nodeName')) return;
+  e.stopPropagation();
+  draggedNode = id;
+  const el = document.getElementById(id);
+  const rect = el.getBoundingClientRect();
+  dragOffset.x = e.clientX - rect.left;
+  dragOffset.y = e.clientY - rect.top;
+  el.classList.add('dragging');
+  
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+function onMouseMove(e) {
+  if (draggedNode) {
+    const n = nodes[draggedNode];
+    const canvasRect = mapCanvas.getBoundingClientRect();
+    n.x = e.clientX - canvasRect.left - dragOffset.x + canvasOffset.x;
+    n.y = e.clientY - canvasRect.top - dragOffset.y + canvasOffset.y;
+    const el = document.getElementById(draggedNode);
+    el.style.left = n.x + 'px';
+    el.style.top = n.y + 'px';
+    updateConnections();
+  }
+  if (isPanning) {
+    canvasOffset.x += e.clientX - panStart.x;
+    canvasOffset.y += e.clientY - panStart.y;
+    panStart.x = e.clientX;
+    panStart.y = e.clientY;
+    applyCanvasOffset();
+  }
+}
+
+function onMouseUp() {
+  if (draggedNode) {
+    const el = document.getElementById(draggedNode);
+    el.classList.remove('dragging');
+    draggedNode = null;
+  }
+  isPanning = false;
+  document.removeEventListener('mousemove', onMouseMove);
+  document.removeEventListener('mouseup', onMouseUp);
+}
+
+// Pan with middle mouse or space+drag
+mapCanvas.addEventListener('mousedown', (e) => {
+  if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    isPanning = true;
+    panStart.x = e.clientX;
+    panStart.y = e.clientY;
+    e.preventDefault();
+  }
+});
+
+function applyCanvasOffset() {
+  Object.values(nodes).forEach(n => {
+    const el = document.getElementById(n.id);
+    if (el) {
+      el.style.left = n.x + 'px';
+      el.style.top = n.y + 'px';
+    }
+  });
+  updateConnections();
+}
+
+// IMAGE
+function addImage(id) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        nodes[id].image = ev.target.result;
+        nodes[id].imageW = Math.min(img.width, 200);
+        nodes[id].imageH = Math.min(img.height, 150);
+        renderNode(id);
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+let resizingNode = null;
+let resizeStart = {x:0, y:0, w:0, h:0};
+
+function startResize(e, id) {
+  e.stopPropagation();
+  e.preventDefault();
+  resizingNode = id;
+  const n = nodes[id];
+  resizeStart.x = e.clientX;
+  resizeStart.y = e.clientY;
+  resizeStart.w = n.imageW;
+  resizeStart.h = n.imageH;
+  
+  document.addEventListener('mousemove', onResizeMove);
+  document.addEventListener('mouseup', onResizeUp);
+}
+
+function onResizeMove(e) {
+  if (!resizingNode) return;
+  const n = nodes[resizingNode];
+  const dx = e.clientX - resizeStart.x;
+  const dy = e.clientY - resizeStart.y;
+  
+  const aspect = resizeStart.w / resizeStart.h;
+  let newW = resizeStart.w + dx;
+  let newH = newW / aspect;
+  
+  if (newH !== resizeStart.h + dy) {
+    newH = resizeStart.h + dy;
+    newW = newH * aspect;
+  }
+  
+  newW = Math.max(40, newW);
+  newH = Math.max(30, newH);
+  
+  n.imageW = Math.round(newW);
+  n.imageH = Math.round(newH);
+  
+  const el = document.getElementById(resizingNode);
+  const img = el.querySelector('.nodeImage');
+  if (img) {
+    img.style.width = n.imageW + 'px';
+    img.style.height = n.imageH + 'px';
+  }
+  el.style.minWidth = Math.max(140, n.imageW + 30) + 'px';
+}
+
+function onResizeUp() {
+  resizingNode = null;
+  document.removeEventListener('mousemove', onResizeMove);
+  document.removeEventListener('mouseup', onResizeUp);
+}
+
+// NOTES
+function openNoteModal(id) {
+  currentNoteNodeId = id;
+  const n = nodes[id];
+  document.getElementById('noteText').value = n.note || '';
+  document.getElementById('noteModal').classList.add('show');
+  document.getElementById('deleteNoteBtn').style.display = n.note ? 'block' : 'none';
+  document.getElementById('noteText').focus();
+}
+
+function closeNoteModal() {
+  document.getElementById('noteModal').classList.remove('show');
+  currentNoteNodeId = null;
+}
+
+function saveNote() {
+  if (!currentNoteNodeId) return;
+  const text = document.getElementById('noteText').value.trim();
+  nodes[currentNoteNodeId].note = text;
+  renderNode(currentNoteNodeId);
+  closeNoteModal();
+}
+
+function deleteNote() {
+  if (!currentNoteNodeId) return;
+  nodes[currentNoteNodeId].note = '';
+  renderNode(currentNoteNodeId);
+  closeNoteModal();
+}
+
+// COLORS
+function openColorPicker(id) {
+  currentColorNodeId = id;
+  document.getElementById('colorPicker').classList.add('show');
+}
+
+function closeColorPicker() {
+  document.getElementById('colorPicker').classList.remove('show');
+  currentColorNodeId = null;
+}
+
+function applyColor(id, color) {
+  if (nodes[id]) {
+    nodes[id].color = color;
+    renderNode(id);
+  }
+}
+
+// AUTO LAYOUT
+function autoLayout() {
+  const roots = Object.values(nodes).filter(n => !n.parent);
+  if (roots.length === 0) { addRootNode(); return; }
+  
+  const canvasRect = mapCanvas.getBoundingClientRect();
+  const startX = 80;
+  const startY = canvasRect.height / 2;
+  
+  function layoutNode(node, x, y, level) {
+    node.x = x;
+    node.y = y;
+    
+    const children = node.children;
+    if (children.length === 0) return;
+    
+    const levelHeight = 80;
+    const totalHeight = children.length * levelHeight;
+    let currentY = y - totalHeight / 2 + levelHeight / 2;
+    
+    children.forEach((childId, i) => {
+      const child = nodes[childId];
+      if (!child) return;
+      layoutNode(child, x + 240, currentY, level + 1);
+      currentY += levelHeight;
+    });
+  }
+  
+  roots.forEach((root, i) => {
+    layoutNode(root, startX, startY + (i - (roots.length-1)/2) * 120, 0);
+  });
+  
+  Object.values(nodes).forEach(n => renderNode(n.id));
+  updateConnections();
+}
+
+// SAVE AS IMAGE
+function saveAsImage() {
+  // Temporarily remove resize handles and selection highlights
+  document.querySelectorAll('.resizeHandle').forEach(h => h.style.display = 'none');
+  document.querySelectorAll('.node').forEach(n => n.style.outline = 'none');
+  
+  html2canvas(mapCanvas, {
+    backgroundColor: '#0d1117',
+    useCORS: true,
+    allowTaint: true,
+    logging: false,
+    scale: 2
+  }).then(canvas => {
+    document.querySelectorAll('.resizeHandle').forEach(h => h.style.display = '');
+    
+    const link = document.createElement('a');
+    link.download = 'mindmap_' + new Date().toISOString().slice(0,19).replace(/:/g,'-') + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }).catch(err => {
+    alert('Errore nel salvataggio: ' + err.message);
+  });
+}
+
+// Close modals on outside click
+document.getElementById('noteModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('noteModal')) closeNoteModal();
+});
+document.getElementById('colorPicker').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('colorPicker')) closeColorPicker();
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeNoteModal();
+    closeColorPicker();
+  }
+});
+
+// Initial demo node
+setTimeout(() => {
+  addRootNode();
+  setTimeout(() => {
+    addChild(Object.keys(nodes)[0]);
+    const rootId = Object.keys(nodes)[0];
+    nodes[rootId].name = 'Idea Principale';
+    renderNode(rootId);
+    const childId = nodes[rootId].children[0];
+    nodes[childId].name = 'Sotto-idea';
+    renderNode(childId);
+  }, 100);
+}, 200);
+</script>
+</body>
+</html>

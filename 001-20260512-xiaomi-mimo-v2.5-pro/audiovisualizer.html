@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Audio Visualizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #04040e;
+            --cyan: #00e5ff;
+            --pink: #ff0066;
+            --purple: #8b5cf6;
+            --txt: #e0dce8;
+            --dim: #4a4660;
+        }
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            width: 100%; height: 100%;
+            overflow: hidden;
+            background: var(--bg);
+            font-family: 'DM Mono', monospace;
+            color: var(--txt);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+
+        /* ─── Upload Overlay ─── */
+        #ov {
+            position: fixed; inset: 0; z-index: 20;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--bg);
+            transition: opacity 1.2s cubic-bezier(.4,0,.2,1), visibility 1.2s;
+        }
+        #ov.off { opacity: 0; visibility: hidden; pointer-events: none; }
+
+        #ov::before {
+            content: '';
+            position: absolute;
+            width: 520px; height: 520px;
+            inset: 0; margin: auto;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0,229,255,.07), transparent 60%);
+            animation: glow 7s ease-in-out infinite alternate;
+            pointer-events: none;
+        }
+        @keyframes glow {
+            from { transform: scale(1) translate(0, 0); opacity: 1; }
+            to   { transform: scale(1.25) translate(20px, -20px); opacity: .5; }
+        }
+
+        .box {
+            text-align: center; max-width: 460px;
+            padding: 0 20px; position: relative; z-index: 1;
+        }
+
+        .box h1 {
+            font-family: 'Syne', sans-serif; font-weight: 800;
+            font-size: clamp(2.2rem, 6vw, 3.6rem);
+            letter-spacing: -.035em; line-height: 1.05;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--cyan), var(--purple), var(--pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .box .sub {
+            font-size: .72rem; color: var(--dim);
+            letter-spacing: .1em; text-transform: uppercase;
+            margin-bottom: 42px;
+        }
+
+        .dz {
+            border: 1px dashed rgba(255,255,255,.1);
+            border-radius: 14px; padding: 50px 28px;
+            cursor: pointer;
+            transition: border-color .3s, background .3s, box-shadow .3s;
+        }
+        .dz:hover, .dz.over {
+            border-color: var(--cyan);
+            background: rgba(0,229,255,.025);
+            box-shadow: 0 0 50px rgba(0,229,255,.07);
+        }
+
+        .dz svg { width: 36px; height: 36px; stroke: var(--dim); margin-bottom: 14px; }
+
+        .dz p { font-size: .82rem; color: var(--dim); line-height: 1.75; }
+        .dz p b { color: var(--cyan); font-weight: 400; }
+
+        .dz .fmt {
+            margin-top: 18px; font-size: .6rem;
+            opacity: .4; letter-spacing: .14em;
+            text-transform: uppercase;
+        }
+
+        #fi { display: none; }
+
+        /* ─── HUD ─── */
+        #hud {
+            position: fixed; bottom: 26px; left: 26px; z-index: 10;
+            opacity: 0; transition: opacity 1.4s; pointer-events: none;
+        }
+        #hud.on { opacity: 1; }
+        #hud .n { font-family: 'Syne', sans-serif; font-weight: 700; font-size: .95rem; opacity: .5; }
+        #hud .m { font-size: .65rem; color: var(--dim); margin-top: 3px; letter-spacing: .06em; }
+
+        /* ─── Controls ─── */
+        #ctrl {
+            position: fixed; top: 22px; right: 22px; z-index: 10;
+            display: flex; gap: 7px;
+            opacity: 0; transition: opacity 1s;
+        }
+        #ctrl.on { opacity: 1; }
+
+        .b {
+            background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.07);
+            color: var(--dim);
+            font-family: 'DM Mono', monospace; font-size: .64rem;
+            padding: 7px 13px; border-radius: 7px; cursor: pointer;
+            letter-spacing: .07em; text-transform: uppercase;
+            transition: background .25s, color .25s, border-color .25s;
+        }
+        .b:hover { background: rgba(255,255,255,.09); color: var(--txt); border-color: rgba(255,255,255,.14); }
+
+        /* ─── Grain Overlay ─── */
+        body::after {
+            content: '';
+            position: fixed; inset: 0;
+            background: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+            opacity: .02; pointer-events: none; z-index: 99;
+            mix-blend-mode: overlay;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="ov">
+    <div class="box">
+        <h1>3D AUDIO<br>VISUALIZER</h1>
+        <p class="sub">immersive frequency experience</p>
+        <div class="dz" id="dz">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <p>Drag &amp; drop audio here<br>or <b>browse files</b></p>
+            <p class="fmt">MP3 &middot; WAV &middot; OGG</p>
+        </div>
+        <input type="file" id="fi" accept="audio/*,.mp3,.wav,.ogg,.flac,.aac,.m4a">
+    </div>
+</div>
+
+<div id="hud">
+    <div class="n" id="hn">—</div>
+    <div class="m" id="hm">—</div>
+</div>
+
+<div id="ctrl">
+    <button class="b" id="bn">New file</button>
+    <button class="b" id="bp">Pause</button>
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+const $ = id => document.getElementById(id);
+
+/* ═══════════════════════════════════════
+   AUDIO ENGINE
+   ═══════════════════════════════════════ */
+let actx, analyser, src, audio, blob;
+
+function ensureAudio() {
+    if (!actx) {
+        actx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = actx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.82;
+        analyser.connect(actx.destination);
+    }
+    if (actx.state === 'suspended') actx.resume();
+}
+
+function loadFile(f) {
+    ensureAudio();
+    if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
+    if (blob) URL.revokeObjectURL(blob);
+    if (src) { try { src.disconnect(); } catch (_) { /* noop */ } }
+
+    blob = URL.createObjectURL(f);
+    audio = new Audio();
+    audio.crossOrigin = 'anonymous';
+    audio.loop = true;
+    audio.src = blob;
+
+    src = actx.createMediaElementSource(audio);
+    src.connect(analyser);
+    audio.play();
+
+    audio.onerror = () => { $('hm').textContent = 'Error loading file'; };
+
+    $('ov').classList.add('off');
+    $('hud').classList.add('on');
+    $('ctrl').classList.add('on');
+    $('hn').textContent = f.name.replace(/\.[^/.]+$/, '');
+    $('hm').textContent = (f.size / 1048576).toFixed(1) + ' MB \u00b7 playing';
+}
+
+/* ═══════════════════════════════════════
+   THREE.JS SCENE
+   ═══════════════════════════════════════ */
+const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x04040e);
+scene.fog = new THREE.FogExp2(0x04040e, 0.025);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 250);
+
+/* ── Post-processing ── */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(
+    new THREE.Vector2(innerWidth, innerHeight), 1.2, 0.5, 0.8
+);
+composer.addPass(bloom);
+
+/* ── Lighting ── */
+scene.add(new THREE.AmbientLight(0x0a0a20, 0.4));
+
+const lCyan = new THREE.PointLight(0x00e5ff, 2, 45);
+lCyan.position.set(7, 13, 7);
+scene.add(lCyan);
+
+const lPink = new THREE.PointLight(0xff0066, 2, 45);
+lPink.position.set(-7, 13, -7);
+scene.add(lPink);
+
+const lPurple = new THREE.PointLight(0x8b5cf6, 1.2, 28);
+lPurple.position.set(0, 9, 0);
+scene.add(lPurple);
+
+/* ═══════════════════════════════════════
+   VISUAL ELEMENTS
+   ═══════════════════════════════════════ */
+
+// ── Outer Bars (128) ──
+const BARS = 128, R1 = 9;
+const outerBars = [];
+const groupOuter = new THREE.Group();
+scene.add(groupOuter);
+
+for (let i = 0; i < BARS; i++) {
+    const angle = (i / BARS) * Math.PI * 2;
+    const hue = 0.5 + (i / BARS) * 0.4;
+    const col = new THREE.Color().setHSL(hue, 1, 0.55);
+    const mat = new THREE.MeshStandardMaterial({
+        color: col, emissive: col, emissiveIntensity: 0.35,
+        metalness: 0.8, roughness: 0.2
+    });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.13, 1, 0.13), mat);
+    mesh.position.set(Math.cos(angle) * R1, 0.5, Math.sin(angle) * R1);
+    mesh.rotation.y = -angle;
+    groupOuter.add(mesh);
+    outerBars.push({ mesh, mat });
+}
+
+// ── Inner Bars (64, frequency-reversed) ──
+const B2 = 64, R2 = 6.5;
+const innerBars = [];
+const groupInner = new THREE.Group();
+scene.add(groupInner);
+
+for (let i = 0; i < B2; i++) {
+    const angle = (i / B2) * Math.PI * 2 + Math.PI / B2;
+    const hue = 0.85 - (i / B2) * 0.4;
+    const col = new THREE.Color().setHSL(hue, 0.65, 0.38);
+    const mat = new THREE.MeshStandardMaterial({
+        color: col, emissive: col, emissiveIntensity: 0.2,
+        metalness: 0.9, roughness: 0.15
+    });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.5, 0.09), mat);
+    mesh.position.set(Math.cos(angle) * R2, 0.25, Math.sin(angle) * R2);
+    mesh.rotation.y = -angle;
+    groupInner.add(mesh);
+    innerBars.push({ mesh, mat });
+}
+
+// ── Waveform Ring ──
+const WFN = 200, Rwf = 7.8;
+const wfArr = new Float32Array(WFN * 3);
+const wfGeo = new THREE.BufferGeometry();
+wfGeo.setAttribute('position', new THREE.BufferAttribute(wfArr, 3));
+const wfMat = new THREE.LineBasicMaterial({
+    color: 0xff0077, transparent: true, opacity: 0.22
+});
+const wfLine = new THREE.LineLoop(wfGeo, wfMat);
+wfLine.position.y = 0.5;
+scene.add(wfLine);
+
+// ── Second Waveform Ring (outer, faint) ──
+const WFN2 = 200, Rwf2 = 10.4;
+const wf2Arr = new Float32Array(WFN2 * 3);
+const wf2Geo = new THREE.BufferGeometry();
+wf2Geo.setAttribute('position', new THREE.BufferAttribute(wf2Arr, 3));
+const wf2Mat = new THREE.LineBasicMaterial({
+    color: 0x00e5ff, transparent: true, opacity: 0.1
+});
+const wf2Line = new THREE.LineLoop(wf2Geo, wf2Mat);
+wf2Line.position.y = 0.3;
+scene.add(wf2Line);
+
+// ── Central Orb ──
+const orbMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, emissive: 0x00e5ff, emissiveIntensity: 1.2,
+    metalness: 0.2, roughness: 0.45
+});
+const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(1.6, 3), orbMat);
+orb.position.y = 2.5;
+scene.add(orb);
+
+const orbWire = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.68, 2),
+    new THREE.MeshBasicMaterial({
+        color: 0x00e5ff, wireframe: true,
+        transparent: true, opacity: 0.1
+    })
+);
+orbWire.position.y = 2.5;
+scene.add(orbWire);
+
+// ── Orb Glow Ring ──
+const glowRingMat = new THREE.MeshBasicMaterial({
+    color: 0x00e5ff, transparent: true, opacity: 0,
+    side: THREE.DoubleSide
+});
+const glowRing = new THREE.Mesh(new THREE.RingGeometry(1.8, 3.5, 64), glowRingMat);
+glowRing.rotation.x = -Math.PI / 2;
+glowRing.position.y = 0.02;
+scene.add(glowRing);
+
+// ── Particles ──
+const PC = 2800;
+const pPositions = new Float32Array(PC * 3);
+const pColors = new Float32Array(PC * 3);
+for (let i = 0; i < PC; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    const r = 14 + Math.random() * 40;
+    pPositions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+    pPositions[i * 3 + 1] = (Math.random() - 0.3) * 24;
+    pPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+    const c = new THREE.Color().setHSL(0.48 + Math.random() * 0.42, 0.7, 0.55);
+    pColors[i * 3] = c.r; pColors[i * 3 + 1] = c.g; pColors[i * 3 + 2] = c.b;
+}
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
+pGeo.setAttribute('color', new THREE.BufferAttribute(pColors, 3));
+const pMat = new THREE.PointsMaterial({
+    size: 0.06, vertexColors: true, transparent: true, opacity: 0.5,
+    blending: THREE.AdditiveBlending, sizeAttenuation: true
+});
+const particles = new THREE.Points(pGeo, pMat);
+scene.add(particles);
+
+// ── Ground ──
+const gridHelper = new THREE.GridHelper(80, 80, 0x0c0c20, 0x070714);
+gridHelper.position.y = -0.01;
+scene.add(gridHelper);
+
+const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(80, 80),
+    new THREE.MeshStandardMaterial({
+        color: 0x04040e, metalness: 0.95, roughness: 0.35,
+        transparent: true, opacity: 0.85
+    })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.02;
+scene.add(ground);
+
+/* ═══════════════════════════════════════
+   ANIMATION LOOP
+   ═══════════════════════════════════════ */
+const freq = new Uint8Array(128);
+const tdom = new Uint8Array(256);
+let camAngle = 0, camTarget = 0;
+const clock = new THREE.Clock();
+let lastBass = 0;
+
+const avg = (arr, start, end) => {
+    let v = 0;
+    for (let i = start; i < end; i++) v += arr[i];
+    return v / (end - start);
+};
+
+(function loop() {
+    requestAnimationFrame(loop);
+    const t = clock.getElapsedTime();
+
+    // Fetch audio data (zeros before audio loads)
+    if (analyser) {
+        analyser.getByteFrequencyData(freq);
+        analyser.getByteTimeDomainData(tdom);
+    }
+
+    const bass  = avg(freq, 0, 20) / 255;
+    const mid   = avg(freq, 20, 60) / 255;
+    const high  = avg(freq, 60, 128) / 255;
+    const vol   = (bass + mid + high) / 3;
+
+    /* ── Outer Bars ── */
+    for (let i = 0; i < BARS; i++) {
+        const di = Math.floor(i / BARS * 128);
+        const v = freq[di] / 255;
+        const targetH = 0.08 + v * 7.5;
+        const b = outerBars[i];
+        b.mesh.scale.y += (targetH - b.mesh.scale.y) * 0.18;
+        b.mesh.position.y = b.mesh.scale.y * 0.5;
+        b.mat.emissiveIntensity = 0.25 + v * 2;
+    }
+
+    /* ── Inner Bars (reversed mapping) ── */
+    for (let i = 0; i < B2; i++) {
+        const di = 127 - Math.floor(i / B2 * 128);
+        const v = freq[di] / 255;
+        const targetH = 0.04 + v * 3.8;
+        const b = innerBars[i];
+        b.mesh.scale.y += (targetH - b.mesh.scale.y) * 0.14;
+        b.mesh.position.y = b.mesh.scale.y * 0.3;
+        b.mat.emissiveIntensity = 0.12 + v * 1.2;
+    }
+
+    /* ── Waveform Ring 1 ── */
+    for (let i = 0; i < WFN; i++) {
+        const a = (i / WFN) * Math.PI * 2;
+        const di = Math.floor(i / WFN * 256);
+        const v = (tdom[di] / 128) - 1;
+        const r = Rwf + v * 1.8;
+        wfArr[i * 3]     = Math.cos(a) * r;
+        wfArr[i * 3 + 1] = v * 0.35;
+        wfArr[i * 3 + 2] = Math.sin(a) * r;
+    }
+    wfGeo.attributes.position.needsUpdate = true;
+    wfMat.opacity = 0.12 + vol * 0.4;
+
+    /* ── Waveform Ring 2 (outer, delayed) ── */
+    for (let i = 0; i < WFN2; i++) {
+        const a = (i / WFN2) * Math.PI * 2 + t * 0.1;
+        const di = Math.floor(i / WFN2 * 256);
+        const v = (tdom[di] / 128) - 1;
+        const r = Rwf2 + v * 1.2;
+        wf2Arr[i * 3]     = Math.cos(a) * r;
+        wf2Arr[i * 3 + 1] = v * 0.2;
+        wf2Arr[i * 3 + 2] = Math.sin(a) * r;
+    }
+    wf2Geo.attributes.position.needsUpdate = true;
+    wf2Mat.opacity = 0.06 + vol * 0.2;
+
+    /* ── Central Orb ── */
+    const orbScale = 1 + bass * 0.6;
+    orb.scale.setScalar(orbScale);
+    orbWire.scale.setScalar(orbScale * 1.04);
+    orb.rotation.y += 0.008 + vol * 0.025;
+    orb.rotation.x = Math.sin(t * 0.4) * 0.15;
+    orbWire.rotation.y -= 0.005;
+
+    const orbHue = 0.5 + Math.sin(t * 0.25) * 0.1;
+    orbMat.emissive.setHSL(orbHue, 1, 0.22 + bass * 0.35);
+    orbMat.emissiveIntensity = 1 + bass * 2.8;
+
+    /* ── Glow Ring ── */
+    const grOpacity = bass > 0.5 ? bass * 0.35 : 0;
+    glowRingMat.opacity += (grOpacity - glowRingMat.opacity) * 0.12;
+    glowRing.scale.setScalar(1 + bass * 0.2);
+
+    /* ── Lights ── */
+    lCyan.intensity   = 1.5 + bass * 5;
+    lPink.intensity   = 1.5 + high * 5;
+    lPurple.intensity = 1 + mid * 3;
+
+    /* ── Particles ── */
+    pMat.opacity = 0.28 + vol * 0.55;
+    particles.rotation.y += 0.00025;
+
+    /* ── Camera ── */
+    camTarget += 0.0014 + vol * 0.003;
+    camAngle += (camTarget - camAngle) * 0.015;
+    const cR = 20 + Math.sin(t * 0.14) * 3;
+    const cH = 7.5 + Math.sin(t * 0.11) * 2.5 + bass * 3.5;
+    camera.position.set(Math.cos(camAngle) * cR, cH, Math.sin(camAngle) * cR);
+    camera.lookAt(0, 1.8, 0);
+
+    /* ── Bloom ── */
+    bloom.strength = 0.8 + vol * 1.4;
+
+    lastBass = bass;
+    composer.render();
+})();
+
+/* ═══════════════════════════════════════
+   UI EVENT HANDLERS
+   ═══════════════════════════════════════ */
+const dz = $('dz');
+const fi = $('fi');
+
+const isAudioFile = f =>
+    f.type.startsWith('audio/') || /\.(mp3|wav|ogg|flac|aac|m4a|wma)$/i.test(f.name);
+
+dz.addEventListener('click', () => fi.click());
+
+dz.addEventListener('dragover', e => {
+    e.preventDefault();
+    dz.classList.add('over');
+});
+
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+
+dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f && isAudioFile(f)) loadFile(f);
+});
+
+fi.addEventListener('change', () => {
+    const f = fi.files[0];
+    if (f) loadFile(f);
+});
+
+$('bn').addEventListener('click', () => {
+    fi.value = '';
+    fi.click();
+});
+
+$('bp').addEventListener('click', () => {
+    if (!audio) return;
+    if (audio.paused) {
+        audio.play();
+        $('bp').textContent = 'Pause';
+    } else {
+        audio.pause();
+        $('bp').textContent = 'Play';
+    }
+});
+
+/* ── Resize ── */
+addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    composer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

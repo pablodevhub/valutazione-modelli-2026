@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 600" width="500" height="600">
+  <!-- Sfondo -->
+  <rect width="500" height="600" fill="#1a2e1a" rx="20"/>
+  
+  <!-- Luna -->
+  <circle cx="420" cy="80" r="40" fill="#f0e68c" opacity="0.8"/>
+  <circle cx="435" cy="70" r="35" fill="#1a2e1a"/>
+  
+  <!-- Alberi silhouette -->
+  <polygon points="50,600 80,350 110,600" fill="#0d1f0d"/>
+  <polygon points="400,600 440,320 480,600" fill="#0d1f0d"/>
+  <polygon points="150,600 170,400 190,600" fill="#0d1f0d"/>
+  <polygon points="320,600 345,380 370,600" fill="#0d1f0d"/>
+  
+  <!-- Terreno -->
+  <ellipse cx="250" cy="580" rx="260" ry="40" fill="#2d4a2d"/>
+  
+  <!-- CORPO BIGFOOT -->
+  
+  <!-- Piede sinistro -->
+  <ellipse cx="180" cy="540" rx="55" ry="25" fill="#5c3a1e"/>
+  <ellipse cx="155" cy="535" rx="12" ry="8" fill="#4a2e15"/>
+  <ellipse cx="175" cy="530" rx="10" ry="7" fill="#4a2e15"/>
+  <ellipse cx="195" cy="530" rx="10" ry="7" fill="#4a2e15"/>
+  <ellipse cx="210" cy="535" rx="10" ry="7" fill="#4a2e15"/>
+  
+  <!-- Piede destro -->
+  <ellipse cx="310" cy="540" rx="55" ry="25" fill="#5c3a1e"/>
+  <ellipse cx="285" cy="535" rx="12" ry="8" fill="#4a2e15"/>
+  <ellipse cx="305" cy="530" rx="10" ry="7" fill="#4a2e15"/>
+  <ellipse cx="325" cy="530" rx="10" ry="7" fill="#4a2e15"/>
+  <ellipse cx="340" cy="535" rx="10" ry="7" fill="#4a2e15"/>
+  
+  <!-- Gamba sinistra -->
+  <rect x="170" y="460" width="40" height="80" rx="18" fill="#4a2e15"/>
+  
+  <!-- Gamba destra -->
+  <rect x="280" y="460" width="40" height="80" rx="18" fill="#4a2e15"/>
+  
+  <!-- Corpo/Busto -->
+  <ellipse cx="250" cy="400" rx="90" ry="110" fill="#5c3a1e"/>
+  <!-- Pelo sul petto -->
+  <ellipse cx="250" cy="380" rx="60" ry="70" fill="#6b4423" opacity="0.6"/>
+  
+  <!-- Braccio sinistro -->
+  <rect x="140" y="340" width="35" height="120" rx="17" fill="#4a2e15" transform="rotate(15,157,340)"/>
+  <!-- Mano sinistra -->
+  <ellipse cx="130" cy="465" rx="22" ry="18" fill="#3d2412"/>
+  <rect x="118" y="455" width="8" height="15" rx="4" fill="#3d2412"/>
+  <rect x="128" y="452" width="8" height="18" rx="4" fill="#3d2412"/>
+  <rect x="138" y="455" width="8" height="15" rx="4" fill="#3d2412"/>
+  
+  <!-- Braccio destro -->
+  <rect x="315" y="340" width="35" height="120" rx="17" fill="#4a2e15" transform="rotate(-15,332,340)"/>
+  <!-- Mano destra -->
+  <ellipse cx="360" cy="465" rx="22" ry="18" fill="#3d2412"/>
+  <rect x="348" y="455" width="8" height="15" rx="4" fill="#3d2412"/>
+  <rect x="358" y="452" width="8" height="18" rx="4" fill="#3d2412"/>
+  <rect x="368" y="455" width="8" height="15" rx="4" fill="#3d2412"/>
+  
+  <!-- Collo -->
+  <rect x="225" y="290" width="50" height="40" rx="15" fill="#5c3a1e"/>
+  
+  <!-- Testa -->
+  <ellipse cx="250" cy="240" rx="70" ry="65" fill="#5c3a1e"/>
+  
+  <!-- Faccia -->
+  <ellipse cx="250" cy="250" rx="50" ry="45" fill="#6b4423"/>
+  
+  <!-- Sopracciglia -->
+  <path d="M210,220 Q225,210 240,218" stroke="#3d2412" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M260,218 Q275,210 290,220" stroke="#3d2412" stroke-width="6" fill="none" stroke-linecap="round"/>
+  
+  <!-- Occhi -->
+  <ellipse cx="228" cy="240" rx="12" ry="10" fill="#1a0f05"/>
+  <ellipse cx="272" cy="240" rx="12" ry="10" fill="#1a0f05"/>
+  <!-- Riflesso occhi -->
+  <ellipse cx="232" cy="237" rx="4" ry="3" fill="#f0e68c" opacity="0.7"/>
+  <ellipse cx="276" cy="237" rx="4" ry="3" fill="#f0e68c" opacity="0.7"/>
+  
+  <!-- Naso -->
+  <ellipse cx="250" cy="260" rx="15" ry="10" fill="#3d2412"/>
+  <ellipse cx="245" cy="258" rx="5" ry="4" fill="#2a1a0d"/>
+  <ellipse cx="255" cy="258" rx="5" ry="4" fill="#2a1a0d"/>
+  
+  <!-- Bocca -->
+  <path d="M230,278 Q250,290 270,278" stroke="#3d2412" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <!-- Denti -->
+  <rect x="240" y="278" width="8" height="8" rx="2" fill="#e8dcc8"/>
+  <rect x="252" y="278" width="8" height="8" rx="2" fill="#e8dcc8"/>
+  
+  <!-- Orecchie -->
+  <ellipse cx="180" cy="245" rx="15" ry="20" fill="#4a2e15"/>
+  <ellipse cx="180" cy="245" rx="8" ry="12" fill="#3d2412"/>
+  <ellipse cx="320" cy="245" rx="15" ry="20" fill="#4a2e15"/>
+  <ellipse cx="320" cy="245" rx="8" ry="12" fill="#3d2412"/>
+  
+  <!-- Pelo sulla testa -->
+  <path d="M200,190 Q210,170 220,185" stroke="#4a2e15" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M220,185 Q230,165 240,180" stroke="#4a2e15" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M240,180 Q250,160 260,178" stroke="#4a2e15" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M260,178 Q270,162 280,180" stroke="#4a2e15" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M280,180 Q290,168 300,190" stroke="#4a2e15" stroke-width="4" fill="none" stroke-linecap="round"/>
+  
+  <!-- Pelo sul corpo -->
+  <path d="M190,330 Q185,310 195,320" stroke="#4a2e15" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M310,330 Q315,310 305,320" stroke="#4a2e15" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M200,370 Q195,350 205,360" stroke="#4a2e15" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M300,370 Q305,350 295,360" stroke="#4a2e15" stroke-width="3" fill="none" stroke-linecap="round"/>
+  
+  <!-- Stelle nel cielo -->
+  <circle cx="80" cy="60" r="2" fill="#f0e68c" opacity="0.8"/>
+  <circle cx="130" cy="100" r="1.5" fill="#f0e68c" opacity="0.6"/>
+  <circle cx="60" cy="140" r="2" fill="#f0e68c" opacity="0.7"/>
+  <circle cx="100" cy="40" r="1.5" fill="#f0e68c" opacity="0.8"/>
+  <circle cx="350" cy="50" r="2" fill="#f0e68c" opacity="0.6"/>
+  <circle cx="470" cy="150" r="1.5" fill="#f0e68c" opacity="0.7"/>
+  <circle cx="160" cy="80" r="1" fill="#f0e68c" opacity="0.5"/>
+  <circle cx="450" cy="200" r="1.5" fill="#f0e68c" opacity="0.6"/>
+  
+  <!-- Testo -->
+  <text x="250" y="590" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#5c8a5c" font-weight="bold" letter-spacing="4">BIGFOOT</text>
+</svg>

@@ -1,0 +1,236 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#060a12"/>
+      <stop offset="50%" stop-color="#0e1a18"/>
+      <stop offset="100%" stop-color="#152520"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#d0c490" stop-opacity=".15"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </radialGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="12"/></filter>
+    <filter id="eyeGlow"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <radialGradient id="vignette" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" stop-color="transparent"/>
+      <stop offset="100%" stop-color="#000" stop-opacity=".45"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Sky -->
+  <rect width="800" height="600" fill="url(#sky)"/>
+
+  <!-- Stars -->
+  <g fill="#fff">
+    <circle cx="88" cy="28" r=".8" opacity=".5"/>
+    <circle cx="195" cy="60" r=".6" opacity=".3"/>
+    <circle cx="335" cy="18" r="1" opacity=".45"/>
+    <circle cx="478" cy="42" r=".5" opacity=".3"/>
+    <circle cx="540" cy="12" r=".8" opacity=".4"/>
+    <circle cx="695" cy="35" r=".9" opacity=".5"/>
+    <circle cx="748" cy="78" r=".5" opacity=".3"/>
+    <circle cx="135" cy="98" r=".5" opacity=".25"/>
+    <circle cx="405" cy="65" r=".7" opacity=".3"/>
+    <circle cx="260" cy="48" r=".4" opacity=".2"/>
+    <circle cx="610" cy="72" r=".6" opacity=".25"/>
+  </g>
+
+  <!-- Moon -->
+  <circle cx="625" cy="88" r="100" fill="url(#glow)"/>
+  <circle cx="625" cy="88" r="25" fill="#ccc0a0" opacity=".85"/>
+  <circle cx="618" cy="82" r="3.5" fill="#bbb090" opacity=".25"/>
+  <circle cx="632" cy="94" r="2.5" fill="#bbb090" opacity=".2"/>
+  <circle cx="620" cy="95" r="2.8" fill="#bbb090" opacity=".18"/>
+
+  <!-- Far mountains -->
+  <path d="M0,340 L70,295 L150,318 L240,265 L330,298 L420,258 L510,288 L600,248 L690,272 L780,258 L800,278 L800,600 L0,600Z" fill="#0c1410"/>
+
+  <!-- Mid mountains -->
+  <path d="M0,372 L90,342 L170,362 L260,328 L350,352 L430,318 L520,348 L610,332 L700,312 L770,338 L800,322 L800,600 L0,600Z" fill="#0e1812"/>
+
+  <!-- Background trees -->
+  <g fill="#0a100c">
+    <polygon points="62,372 72,318 67,323 78,275 72,280 84,238 77,244 90,205 83,214 94,175 105,214 98,205 111,244 104,238 116,280 110,275 121,323 116,318 126,372"/>
+    <rect x="84" y="372" width="10" height="32"/>
+    <polygon points="698,362 708,312 703,317 714,272 708,278 720,240 712,248 726,212 718,222 730,188 742,222 734,212 748,248 740,240 752,278 746,272 757,317 752,312 762,362"/>
+    <rect x="720" y="362" width="10" height="32"/>
+    <polygon points="148,368 156,328 152,332 161,295 156,300 166,262 159,268 171,235 163,244 174,210 185,244 177,235 189,268 182,262 192,300 187,295 196,332 192,328 200,368"/>
+    <rect x="164" y="368" width="9" height="28"/>
+  </g>
+
+  <!-- Mid-ground trees -->
+  <g fill="#08100a">
+    <polygon points="168,438 188,358 176,368 198,288 184,300 210,218 194,232 222,162 206,180 228,120 250,180 234,162 262,232 246,218 272,300 258,288 280,368 268,358 288,438"/>
+    <rect x="216" y="438" width="20" height="108"/>
+    <polygon points="552,428 570,352 562,360 578,288 568,300 588,228 576,242 598,182 586,198 604,148 622,198 610,182 632,242 620,228 640,300 630,288 646,360 638,352 656,428"/>
+    <rect x="586" y="428" width="18" height="98"/>
+    <polygon points="648,418 660,368 654,374 666,330 660,336 672,298 664,306 678,270 670,280 682,248 694,280 686,270 700,306 692,298 704,336 698,330 710,374 704,368 716,418"/>
+    <rect x="674" y="418" width="14" height="68"/>
+    <polygon points="398,422 410,382 404,387 416,348 410,354 422,320 414,328 428,298 420,308 432,278 444,308 436,298 450,328 442,320 454,354 448,348 460,387 454,382 466,422"/>
+    <rect x="422" y="422" width="12" height="42"/>
+  </g>
+
+  <!-- Fog behind bigfoot -->
+  <ellipse cx="380" cy="445" rx="250" ry="42" fill="#142618" opacity=".4" filter="url(#blur)"/>
+
+  <!-- Ground -->
+  <path d="M0,470 Q80,463 160,468 Q240,474 320,466 Q400,458 480,468 Q560,478 640,466 Q720,456 800,466 L800,600 L0,600Z" fill="#0d150e"/>
+  <path d="M0,480 Q100,475 200,478 Q300,482 400,476 Q500,472 600,480 Q700,486 800,478 L800,600 L0,600Z" fill="#0a120a" opacity=".6"/>
+
+  <!-- ============ BIGFOOT ============ -->
+  <g id="bigfoot">
+
+    <!-- Body mass -->
+    <g fill="#140c04">
+      <ellipse cx="378" cy="218" rx="66" ry="56"/>
+      <ellipse cx="378" cy="278" rx="54" ry="44"/>
+      <ellipse cx="378" cy="328" rx="45" ry="32"/>
+    </g>
+
+    <!-- Chest moonlight highlight -->
+    <ellipse cx="385" cy="225" rx="38" ry="32" fill="#1e1410" opacity=".35"/>
+
+    <!-- Limbs -->
+    <g stroke="#140c04" fill="none" stroke-linecap="round">
+      <path d="M310,205 C292,260 278,330 270,400" stroke-width="28"/>
+      <path d="M446,205 C464,260 478,330 486,400" stroke-width="28"/>
+      <path d="M355,325 C348,375 342,425 338,472" stroke-width="32"/>
+      <path d="M400,325 C406,375 412,425 416,472" stroke-width="32"/>
+    </g>
+
+    <!-- Extremities -->
+    <g fill="#140c04">
+      <ellipse cx="268" cy="408" rx="14" ry="22"/>
+      <ellipse cx="488" cy="408" rx="14" ry="22"/>
+      <ellipse cx="328" cy="478" rx="32" ry="10"/>
+      <ellipse cx="426" cy="478" rx="32" ry="10"/>
+      <ellipse cx="378" cy="142" rx="36" ry="44"/>
+      <path d="M358,112 C362,96 370,88 378,86 C386,88 394,96 398,112Z"/>
+    </g>
+
+    <!-- Fingers -->
+    <g stroke="#0e0802" stroke-width="2" stroke-linecap="round" fill="none">
+      <path d="M260,420 C256,428 254,436 258,440"/>
+      <path d="M264,422 C261,430 260,438 264,442"/>
+      <path d="M270,423 C268,431 268,440 272,443"/>
+      <path d="M496,420 C500,428 502,436 498,440"/>
+      <path d="M492,422 C495,430 496,438 492,442"/>
+      <path d="M486,423 C488,431 488,440 484,443"/>
+    </g>
+
+    <!-- Brow ridge -->
+    <path d="M344,134 C348,126 362,120 378,118 C394,120 408,126 412,134 C408,140 394,144 378,146 C362,144 348,140 344,134Z" fill="#0e0802"/>
+
+    <!-- Face -->
+    <ellipse cx="375" cy="152" rx="22" ry="18" fill="#1a1208" opacity=".8"/>
+
+    <!-- Nose -->
+    <ellipse cx="374" cy="153" rx="8" ry="5" fill="#0e0802"/>
+    <circle cx="371" cy="154" r="1.5" fill="#080402"/>
+    <circle cx="378" cy="154" r="1.5" fill="#080402"/>
+
+    <!-- Mouth -->
+    <path d="M365,162 C371,166 381,166 387,162" stroke="#0e0802" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+
+    <!-- Ears -->
+    <ellipse cx="342" cy="140" rx="5" ry="9" fill="#120a03" transform="rotate(-10,342,140)"/>
+    <ellipse cx="414" cy="140" rx="5" ry="9" fill="#120a03" transform="rotate(10,414,140)"/>
+
+    <!-- Eyes -->
+    <ellipse cx="364" cy="138" rx="5" ry="3.5" fill="#c89830" opacity=".85" filter="url(#eyeGlow)"/>
+    <ellipse cx="388" cy="137" rx="5" ry="3.5" fill="#c89830" opacity=".85" filter="url(#eyeGlow)"/>
+    <ellipse cx="365" cy="138" rx="2.5" ry="2.8" fill="#f0d050"/>
+    <ellipse cx="389" cy="137" rx="2.5" ry="2.8" fill="#f0d050"/>
+    <circle cx="363" cy="137" r="1" fill="#fff" opacity=".55"/>
+    <circle cx="387" cy="136" r="1" fill="#fff" opacity=".55"/>
+
+    <!-- Fur texture -->
+    <g stroke="#2a1c0e" stroke-width="1.2" stroke-linecap="round" fill="none" opacity=".3">
+      <line x1="362" y1="98" x2="357" y2="110"/>
+      <line x1="374" y1="93" x2="372" y2="105"/>
+      <line x1="386" y1="94" x2="389" y2="106"/>
+      <line x1="396" y1="100" x2="400" y2="112"/>
+      <line x1="348" y1="118" x2="342" y2="128"/>
+      <line x1="408" y1="116" x2="414" y2="126"/>
+      <line x1="318" y1="188" x2="310" y2="200"/>
+      <line x1="335" y1="184" x2="328" y2="196"/>
+      <line x1="418" y1="186" x2="425" y2="198"/>
+      <line x1="438" y1="190" x2="445" y2="202"/>
+      <line x1="338" y1="218" x2="330" y2="235"/>
+      <line x1="358" y1="228" x2="350" y2="248"/>
+      <line x1="378" y1="222" x2="382" y2="242"/>
+      <line x1="398" y1="215" x2="406" y2="235"/>
+      <line x1="418" y1="210" x2="428" y2="228"/>
+      <line x1="342" y1="265" x2="334" y2="285"/>
+      <line x1="362" y1="272" x2="356" y2="292"/>
+      <line x1="385" y1="268" x2="390" y2="288"/>
+      <line x1="405" y1="262" x2="414" y2="282"/>
+      <line x1="422" y1="256" x2="430" y2="274"/>
+      <line x1="348" y1="310" x2="342" y2="328"/>
+      <line x1="370" y1="315" x2="374" y2="332"/>
+      <line x1="395" y1="310" x2="402" y2="328"/>
+      <line x1="415" y1="305" x2="422" y2="322"/>
+      <line x1="298" y1="235" x2="290" y2="250"/>
+      <line x1="288" y1="270" x2="280" y2="288"/>
+      <line x1="278" y1="310" x2="272" y2="328"/>
+      <line x1="274" y1="350" x2="268" y2="368"/>
+      <line x1="458" y1="238" x2="466" y2="252"/>
+      <line x1="468" y1="272" x2="476" y2="290"/>
+      <line x1="478" y1="312" x2="484" y2="330"/>
+      <line x1="482" y1="352" x2="488" y2="370"/>
+      <line x1="352" y1="340" x2="346" y2="360"/>
+      <line x1="346" y1="380" x2="340" y2="400"/>
+      <line x1="342" y1="420" x2="336" y2="440"/>
+      <line x1="402" y1="340" x2="408" y2="360"/>
+      <line x1="408" y1="380" x2="414" y2="400"/>
+      <line x1="414" y1="420" x2="420" y2="440"/>
+    </g>
+
+    <!-- Shaggy fur edges -->
+    <g stroke="#201410" stroke-width="2.5" stroke-linecap="round" fill="none" opacity=".2">
+      <path d="M304,210 C298,216 302,224 308,220"/>
+      <path d="M450,212 C456,218 452,226 446,222"/>
+      <path d="M290,248 C284,254 288,262 294,258"/>
+      <path d="M466,250 C472,256 468,264 462,260"/>
+      <path d="M310,250 C304,256 306,264 312,260"/>
+      <path d="M442,248 C448,254 446,262 440,258"/>
+      <path d="M308,288 C302,294 304,302 310,298"/>
+      <path d="M444,286 C450,292 448,300 442,296"/>
+      <path d="M272,340 C266,346 270,354 276,350"/>
+      <path d="M484,342 C490,348 486,356 480,352"/>
+    </g>
+  </g>
+
+  <!-- Foreground fog -->
+  <ellipse cx="180" cy="522" rx="200" ry="32" fill="#142618" opacity=".25" filter="url(#blur)"/>
+  <ellipse cx="620" cy="528" rx="240" ry="38" fill="#142618" opacity=".2" filter="url(#blur)"/>
+
+  <!-- Foreground vegetation -->
+  <g fill="#07100a">
+    <ellipse cx="55" cy="518" rx="48" ry="26"/>
+    <ellipse cx="30" cy="506" rx="32" ry="20"/>
+    <ellipse cx="745" cy="515" rx="45" ry="24"/>
+    <ellipse cx="775" cy="504" rx="30" ry="18"/>
+  </g>
+
+  <!-- Grass tufts -->
+  <g stroke="#0a120a" stroke-width="1.5" stroke-linecap="round" fill="none">
+    <path d="M128,488 L133,470 L136,488 L140,472 L143,488 L148,474 L150,488"/>
+    <path d="M618,486 L622,468 L625,486 L629,470 L632,486 L637,472 L639,486"/>
+    <path d="M458,490 L462,476 L465,490 L469,478 L472,490"/>
+    <path d="M288,488 L291,473 L294,488 L298,475 L301,488"/>
+  </g>
+
+  <!-- Atmospheric particles -->
+  <g fill="#fff" opacity=".08">
+    <circle cx="175" cy="235" r=".8"/>
+    <circle cx="525" cy="275" r=".6"/>
+    <circle cx="315" cy="165" r=".5"/>
+    <circle cx="475" cy="375" r=".7"/>
+    <circle cx="115" cy="335" r=".4"/>
+    <circle cx="655" cy="195" r=".6"/>
+  </g>
+
+  <!-- Vignette -->
+  <rect width="800" height="600" fill="url(#vignette)"/>
+</svg>

@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gutenberg Clone - Editor a Blocchi</title>
+<style>
+  :root {
+    --ge-border: #e0e0e0;
+    --ge-bg: #ffffff;
+    --ge-hover: #f0f7ff;
+    --ge-primary: #0073aa;
+    --ge-danger: #d63638;
+    --ge-text: #1e1e1e;
+    --ge-muted: #757575;
+    --ge-radius: 4px;
+    --ge-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f0f0f1;
+    color: var(--ge-text);
+    padding: 40px 20px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  h1.page-title {
+    font-size: 28px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+
+  .page-subtitle {
+    color: var(--ge-muted);
+    margin-bottom: 30px;
+    font-size: 14px;
+  }
+
+  /* ===== CUSTOM ELEMENT: GUTENBERG-EDITOR ===== */
+  gutenberg-editor {
+    display: block;
+    background: var(--ge-bg);
+    border: 1px solid var(--ge-border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: var(--ge-shadow);
+  }
+
+  /* Toolbar */
+  .ge-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border-bottom: 1px solid var(--ge-border);
+    align-items: center;
+  }
+
+  .ge-toolbar-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--ge-muted);
+    font-weight: 600;
+    margin-right: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  .ge-toolbar button {
+    padding: 6px 12px;
+    border: 1px solid transparent;
+    border-radius: var(--ge-radius);
+    background: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--ge-text);
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+
+  .ge-toolbar button:hover {
+    background: var(--ge-hover);
+    border-color: var(--ge-primary);
+    color: var(--ge-primary);
+  }
+
+  .ge-toolbar button.danger {
+    color: var(--ge-danger);
+  }
+  .ge-toolbar button.danger:hover {
+    background: #fcf0f1;
+    border-color: var(--ge-danger);
+  }
+
+  .ge-toolbar .separator {
+    width: 1px;
+    height: 24px;
+    background: var(--ge-border);
+    margin: 0 4px;
+  }
+
+  /* Container blocchi */
+  .ge-blocks {
+    padding: 16px;
+    min-height: 200px;
+  }
+
+  .ge-empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--ge-muted);
+    font-size: 14px;
+  }
+
+  .ge-empty-state svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+    opacity: 0.4;
+  }
+
+  /* ===== SINGOLO BLOCCO ===== */
+  .ge-block {
+    position: relative;
+    border: 1px solid transparent;
+    border-radius: var(--ge-radius);
+    margin-bottom: 8px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    background: #fff;
+  }
+
+  .ge-block:hover {
+    border-color: var(--ge-border);
+    box-shadow: var(--ge-shadow);
+  }
+
+  .ge-block.dragging {
+    opacity: 0.4;
+    border: 2px dashed var(--ge-primary);
+  }
+
+  .ge-block.drag-over {
+    border-top: 3px solid var(--ge-primary);
+  }
+
+  /* Header del blocco */
+  .ge-block-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    background: #fafafa;
+    border-radius: var(--ge-radius) var(--ge-radius) 0 0;
+    border-bottom: 1px solid transparent;
+  }
+
+  .ge-block:hover .ge-block-header {
+    border-bottom-color: var(--ge-border);
+  }
+
+  .ge-drag-handle {
+    cursor: grab;
+    padding: 4px;
+    color: var(--ge-muted);
+    display: flex;
+    align-items: center;
+    font-size: 16px;
+    user-select: none;
+  }
+  .ge-drag-handle:active { cursor: grabbing; }
+
+  .ge-block-type {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--ge-muted);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    flex: 1;
+  }
+
+  .ge-block-actions {
+    display: flex;
+    gap: 2px;
+  }
+
+  .ge-block-actions button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-size: 14px;
+    color: var(--ge-muted);
+    transition: all 0.15s;
+  }
+
+  .ge-block-actions button:hover {
+    background: #e5e5e5;
+    color: var(--ge-text);
+  }
+
+  .ge-block-actions button.delete-btn:hover {
+    background: #fcf0f1;
+    color: var(--ge-danger);
+  }
+
+  /* Formattazione inline */
+  .ge-format-bar {
+    display: flex;
+    gap: 2px;
+    padding: 4px 8px;
+    background: #fcfcfc;
+    border-bottom: 1px solid #f0f0f0;
+    flex-wrap: wrap;
+  }
+
+  .ge-format-bar button {
+    width: 30px;
+    height: 30px;
+    border: 1px solid transparent;
+    background: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--ge-muted);
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ge-format-bar button:hover {
+    background: var(--ge-hover);
+    color: var(--ge-primary);
+    border-color: var(--ge-primary);
+  }
+
+  .ge-format-bar button.active {
+    background: var(--ge-primary);
+    color: #fff;
+    border-color: var(--ge-primary);
+  }
+
+  .ge-format-bar .separator {
+    width: 1px;
+    background: var(--ge-border);
+    margin: 4px 2px;
+  }
+
+  /* Area editabile */
+  .ge-content {
+    padding: 12px 16px;
+    min-height: 40px;
+    outline: none;
+    font-size: 15px;
+    line-height: 1.6;
+    word-wrap: break-word;
+  }
+
+  .ge-content:empty::before {
+    content: attr(data-placeholder);
+    color: #b0b0b0;
+    pointer-events: none;
+  }
+
+  .ge-content h1 { font-size: 2em; font-weight: 700; margin: 0.5em 0; }
+  .ge-content h2 { font-size: 1.5em; font-weight: 600; margin: 0.5em 0; }
+  .ge-content h3 { font-size: 1.25em; font-weight: 600; margin: 0.5em 0; }
+  .ge-content p { margin: 0.5em 0; }
+  .ge-content ul, .ge-content ol { padding-left: 24px; margin: 0.5em 0; }
+  .ge-content li { margin: 4px 0; }
+  .ge-content blockquote {
+    border-left: 4px solid var(--ge-primary);
+    padding-left: 16px;
+    margin: 0.5em 0;
+    color: var(--ge-muted);
+    font-style: italic;
+  }
+  .ge-content code {
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+  }
+  .ge-content pre {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 16px;
+    border-radius: var(--ge-radius);
+    overflow-x: auto;
+    margin: 0.5em 0;
+  }
+  .ge-content pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+  }
+  .ge-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--ge-radius);
+    margin: 8px 0;
+  }
+  .ge-content hr {
+    border: none;
+    border-top: 2px solid var(--ge-border);
+    margin: 16px 0;
+  }
+  .ge-content a {
+    color: var(--ge-primary);
+    text-decoration: underline;
+  }
+
+  /* Image block specific */
+  .ge-image-controls {
+    display: flex;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #fafafa;
+    border-top: 1px solid #f0f0f0;
+    align-items: center;
+  }
+
+  .ge-image-controls input {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid var(--ge-border);
+    border-radius: var(--ge-radius);
+    font-size: 13px;
+    outline: none;
+  }
+
+  .ge-image-controls input:focus {
+    border-color: var(--ge-primary);
+  }
+
+  .ge-image-controls button {
+    padding: 6px 14px;
+    background: var(--ge-primary);
+    color: #fff;
+    border: none;
+    border-radius: var(--ge-radius);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .ge-image-controls button:hover {
+    background: #005a87;
+  }
+
+  /* HTML Output Panel */
+  .ge-output-panel {
+    margin-top: 16px;
+    border: 1px solid var(--ge-border);
+    border-radius: var(--ge-radius);
+    overflow: hidden;
+  }
+
+  .ge-output-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: #1e1e1e;
+    color: #fff;
+  }
+
+  .ge-output-header span {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .ge-output-header button {
+    padding: 4px 12px;
+    background: var(--ge-primary);
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .ge-output-header button:hover { background: #005a87; }
+
+  .ge-output-content {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 16px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    max-height: 300px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* Demo form */
+  .demo-form {
+    margin-top: 40px;
+    padding: 24px;
+    background: #fff;
+    border: 1px solid var(--ge-border);
+    border-radius: 8px;
+    box-shadow: var(--ge-shadow);
+  }
+
+  .demo-form h2 {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+
+  .demo-form p {
+    color: var(--ge-muted);
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  .demo-form .form-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .demo-form input[type="text"] {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid var(--ge-border);
+    border-radius: var(--ge-radius);
+    font-size: 14px;
+    outline: none;
+  }
+
+  .demo-form input[type="text"]:focus {
+    border-color: var(--ge-primary);
+  }
+
+  .demo-form button[type="submit"] {
+    padding: 10px 24px;
+    background: var(--ge-primary);
+    color: #fff;
+    border: none;
+    border-radius: var(--ge-radius);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .demo-form button[type="submit"]:hover {
+    background: #005a87;
+  }
+
+  .form-preview {
+    margin-top: 16px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: var(--ge-radius);
+    font-size: 12px;
+    color: var(--ge-muted);
+    word-break: break-all;
+    max-height: 100px;
+    overflow: auto;
+    font-family: monospace;
+  }
+
+  .form-preview strong {
+    color: var(--ge-text);
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">📝 Gutenberg Clone — Editor a Blocchi</h1>
+<p class="page-subtitle">Aggiungi, riordina, modifica e cancella blocchi. Il componente è riutilizzabile e funziona dentro i form!</p>
+
+<!-- ===== ESEMPIO 1: Uso standalone ===== -->
+<h2 style="font-size:16px;margin:24px 0 8px;">Esempio 1 — Editor Standalone</h2>
+<gutenberg-editor id="editor1"></gutenberg-editor>
+
+<!-- ===== ESEMPIO 2: Dentro un form ===== -->
+<div class="demo-form">
+  <h2>Esempio 2 — Dentro un Form (Submit → Server)</h2>
+  <p>Quando premi "Invia", il valore di <code style="background:#f0f0f0;padding:2px 6px;border-radius:3px;">name="content"</code> conterrà l'HTML generato dall'editor.</p>
+  <form id="demoForm" onsubmit="handleSubmit(event)">
+    <div class="form-row">
+      <input type="text" name="title" placeholder="Titolo della pagina..." value="La Mia Pagina">
+    </div>
+    <gutenberg-editor name="content" id="editor2" style="margin-bottom:12px;"></gutenberg-editor>
+    <button type="submit">📤 Invia al Server</button>
+    <div class="form-preview" id="formPreview">
+      <strong>Anteprima del campo nascosto:</strong> <span id="previewText">(aspetta il submit...)</span>
+    </div>
+  </form>
+</div>
+
+<script>
+// ============================================================
+// WEB COMPONENT: <gutenberg-editor>
+// ============================================================
+class GutenbergEditor extends HTMLElement {
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this.blocks = [];
+    this.blockIdCounter = 0;
+  }
+
+  static get observedAttributes() {
+    return ['name'];
+  }
+
+  connectedCallback() {
+    this.render();
+    this.setupEvents();
+  }
+
+  attributeChangedCallback(name, oldVal, newVal) {
+    if (name === 'name') {
+      this.name = newVal;
+      if (this._hiddenInput) {
+        this._hiddenInput.name = newVal;
+      }
+    }
+  }
+
+  get value() {
+    return this.generateHTML();
+  }
+
+  set value(html) {
+    // Parse HTML and recreate blocks
+    this.blocks = [];
+    this.renderBlocks();
+  }
+
+  render() {
+    const name = this.getAttribute('name') || 'content';
+    this.name = name;
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        /* Toolbar */
+        .ge-toolbar {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          padding: 10px 12px;
+          background: #f8f9fa;
+          border-bottom: 1px solid #e0e0e0;
+          align-items: center;
+        }
+        .ge-toolbar-label {
+          font-size: 11px;
+          text-transform: uppercase;
+          color: #757575;
+          font-weight: 600;
+          margin-right: 4px;
+          letter-spacing: 0.5px;
+        }
+        .ge-toolbar button {
+          padding: 6px 12px;
+          border: 1px solid transparent;
+          border-radius: 4px;
+          background: #fff;
+          cursor: pointer;
+          font-size: 13px;
+          color: #1e1e1e;
+          transition: all 0.15s;
+          font-weight: 500;
+        }
+        .ge-toolbar button:hover {
+          background: #f0f7ff;
+          border-color: #0073aa;
+          color: #0073aa;
+        }
+        .ge-toolbar button.danger { color: #d63638; }
+        .ge-toolbar button.danger:hover { background: #fcf0f1; border-color: #d63638; }
+        .ge-toolbar .separator {
+          width: 1px; height: 24px; background: #e0e0e0; margin: 0 4px;
+        }
+
+        /* Blocks container */
+        .ge-blocks {
+          padding: 16px;
+          min-height: 200px;
+        }
+        .ge-empty-state {
+          text-align: center;
+          padding: 60px 20px;
+          color: #757575;
+          font-size: 14px;
+        }
+        .ge-empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.4; }
+
+        /* Block */
+        .ge-block {
+          position: relative;
+          border: 1px solid transparent;
+          border-radius: 4px;
+          margin-bottom: 8px;
+          transition: border-color 0.15s, box-shadow 0.15s;
+          background: #fff;
+        }
+        .ge-block:hover { border-color: #e0e0e0; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+        .ge-block.dragging { opacity: 0.4; border: 2px dashed #0073aa; }
+        .ge-block.drag-over { border-top: 3px solid #0073aa; }
+
+        .ge-block-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 4px 8px;
+          background: #fafafa;
+          border-radius: 4px 4px 0 0;
+          border-bottom: 1px solid transparent;
+        }
+        .ge-block:hover .ge-block-header { border-bottom-color: #e0e0e0; }
+
+        .ge-drag-handle {
+          cursor: grab; padding: 4px; color: #757575; font-size: 16px;
+          user-select: none; display: flex; align-items: center;
+        }
+        .ge-drag-handle:active { cursor: grabbing; }
+
+        .ge-block-type {
+          font-size: 11px; text-transform: uppercase; color: #757575;
+          font-weight: 600; letter-spacing: 0.5px; flex: 1;
+        }
+
+        .ge-block-actions { display: flex; gap: 2px; }
+        .ge-block-actions button {
+          background: none; border: none; cursor: pointer; padding: 4px 6px;
+          border-radius: 3px; font-size: 14px; color: #757575; transition: all 0.15s;
+        }
+        .ge-block-actions button:hover { background: #e5e5e5; color: #1e1e1e; }
+        .ge-block-actions button.delete-btn:hover { background: #fcf0f1; color: #d63638; }
+
+        /* Format bar */
+        .ge-format-bar {
+          display: flex; gap: 2px; padding: 4px 8px;
+          background: #fcfcfc; border-bottom: 1px solid #f0f0f0; flex-wrap: wrap;
+        }
+        .ge-format-bar button {
+          width: 30px; height: 30px; border: 1px solid transparent; background: none;
+          border-radius: 3px; cursor: pointer; font-size: 14px; font-weight: bold;
+          color: #757575; transition: all 0.15s;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .ge-format-bar button:hover { background: #f0f7ff; color: #0073aa; border-color: #0073aa; }
+        .ge-format-bar button.active { background: #0073aa; color: #fff; border-color: #0073aa; }
+        .ge-format-bar .sep { width: 1px; background: #e0e0e0; margin: 4px 2px; }
+
+        /* Content */
+        .ge-content {
+          padding: 12px 16px; min-height: 40px; outline: none;
+          font-size: 15px; line-height: 1.6; word-wrap: break-word;
+        }
+        .ge-content:empty::before {
+          content: attr(data-placeholder); color: #b0b0b0; pointer-events: none;
+        }
+        .ge-content h1 { font-size: 2em; font-weight: 700; margin: 0.5em 0; }
+        .ge-content h2 { font-size: 1.5em; font-weight: 600; margin: 0.5em 0; }
+        .ge-content h3 { font-size: 1.25em; font-weight: 600; margin: 0.5em 0; }
+        .ge-content p { margin: 0.5em 0; }
+        .ge-content ul, .ge-content ol { padding-left: 24px; margin: 0.5em 0; }
+        .ge-content li { margin: 4px 0; }
+        .ge-content blockquote {
+          border-left: 4px solid #0073aa; padding-left: 16px; margin: 0.5em 0;
+          color: #757575; font-style: italic;
+        }
+        .ge-content code {
+          background: #f0f0f0; padding: 2px 6px; border-radius: 3px;
+          font-family: 'Courier New', monospace; font-size: 0.9em;
+        }
+        .ge-content img { max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0; }
+        .ge-content hr { border: none; border-top: 2px solid #e0e0e0; margin: 16px 0; }
+        .ge-content a { color: #0073aa; text-decoration: underline; }
+
+        /* Image controls */
+        .ge-image-controls {
+          display: flex; gap: 8px; padding: 8px 16px;
+          background: #fafafa; border-top: 1px solid #f0f0f0; align-items: center;
+        }
+        .ge-image-controls input {
+          flex: 1; padding: 6px 10px; border: 1px solid #e0e0e0;
+          border-radius: 4px; font-size: 13px; outline: none;
+        }
+        .ge-image-controls input:focus { border-color: #0073aa; }
+        .ge-image-controls button {
+          padding: 6px 14px; background: #0073aa; color: #fff; border: none;
+          border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;
+        }
+        .ge-image-controls button:hover { background: #005a87; }
+
+        /* Output */
+        .ge-output-panel {
+          margin-top: 16px; border: 1px solid #e0e0e0; border-radius: 4px; overflow: hidden;
+        }
+        .ge-output-header {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 10px 16px; background: #1e1e1e; color: #fff;
+        }
+        .ge-output-header span { font-size: 13px; font-weight: 600; }
+        .ge-output-header button {
+          padding: 4px 12px; background: #0073aa; color: #fff; border: none;
+          border-radius: 3px; cursor: pointer; font-size: 12px; font-weight: 600;
+        }
+        .ge-output-header button:hover { background: #005a87; }
+        .ge-output-content {
+          background: #1e1e1e; color: #d4d4d4; padding: 16px;
+          font-family: 'Courier New', monospace; font-size: 13px;
+          line-height: 1.5; max-height: 300px; overflow: auto;
+          white-space: pre-wrap; word-break: break-all;
+        }
+
+        /* Hidden input for form submission */
+        .ge-hidden-input { display: none; }
+      </style>
+
+      <div class="ge-toolbar">
+        <span class="ge-toolbar-label">Aggiungi blocco:</span>
+        <button onclick="document.dispatchEvent(new CustomEvent('ge-add-block', {detail:'paragraph', bubbles:true}))">¶ Paragrafo</button>
+        <button onclick="document.dispatchEvent(new CustomEvent('ge-add-block', {detail:'h1', bubbles:true}))">H1 Titolo</button>
+        <button onclick="document.dispatchEvent(new CustomEvent('ge-add-block', {detail:'h2', bubbles:true}))">H2 Titolo</button>
+        <button onclick="document.dispatchEvent(new CustomEvent('ge-add-block', {detail:'h3', bubbles:true}))">H3 Titolo</button>
+        <button onclick="document.dispatchEvent(new CustomEvent('ge-add-block', {detail:'ul', bubbles:true}))">• Lista</button>
+        <button onclick="document.dispatchEvent(new CustomEvent('ge-add-block', {detail:'ol', bubbles:true}))">1. Lista numerata</button>
+        <button onclick="document.dispatchEvent(new CustomEvent('ge-add-block', {detail:'quote', bubbles:true}))">" Citazione</button>
+        <button onclick="document.dispatchEvent(new CustomEvent('ge-add-block', {detail:'code', bubbles:true}))">&lt;/&gt; Codice</button>
+        <button onclick="document.dispatchEvent(new CustomEvent('ge-add-block', {detail:'image', bubbles:true}))">🖼 Immagine</button>
+        <button onclick="document.dispatchEvent(new CustomEvent('ge-add-block', {detail:'divider', bubbles:true}))">— Divider</button>
+        <span class="separator"></span>
+        <button onclick="document.dispatchEvent(new CustomEvent('ge-show-html', {bubbles:true}))" style="color:#0073aa;font-weight:700;">&lt;/&gt; Mostra HTML</button>
+        <button onclick="document.dispatchEvent(new CustomEvent('ge-clear-all', {bubbles:true}))" class="danger">🗑 Svuota tutto</button>
+      </div>
+
+      <div class="ge-blocks">
+        <div class="ge-empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <line x1="12" y1="8" x2="12" y2="16"/>
+            <line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+          Clicca sui pulsanti sopra per aggiungere blocchi.<br>
+          Trascina per riordinare, clicca per modificare.
+        </div>
+      </div>
+
+      <div class="ge-output-panel" id="outputPanel" style="display:none;">
+        <div class="ge-output-header">
+          <span>📄 HTML Generato</span>
+          <button onclick="navigator.clipboard.writeText(this.closest('.ge-output-panel').querySelector('.ge-output-content').textContent); this.textContent='✅ Copiato!'; setTimeout(()=>this.textContent='📋 Copia',2000)">📋 Copia</button>
+        </div>
+        <div class="ge-output-content" id="outputContent"></div>
+      </div>
+
+      <input type="hidden" class="ge-hidden-input" name="${name}" id="hiddenInput" value="">
+    `;
+
+    this._hiddenInput = this.shadowRoot.getElementById('hiddenInput');
+    this._outputPanel = this.shadowRoot.getElementById('outputPanel');
+    this._outputContent = this.shadowRoot.getElementById('outputContent');
+    this._blocksContainer = this.shadowRoot.querySelector('.ge-blocks');
+  }
+
+  setupEvents() {
+    // Listen for custom events from toolbar buttons
+    this.addEventListener('ge-add-block', (e) => {
+      this.addBlock(e.detail);
+    });
+
+    this.addEventListener('ge-show-html', () => {
+      this.showHTML();
+    });
+
+    this.addEventListener('ge-clear-all', () => {
+      if (confirm('Sei sicuro di voler cancellare tutti i blocchi?')) {
+        this.blocks = [];
+        this.renderBlocks();
+        this.updateHiddenInput();
+      }
+    });
+
+    // Keyboard shortcut: Ctrl+B for bold, etc.
+    this.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'b') { e.preventDefault(); this.execCmd('bold'); }
+        if (e.key === 'i') { e.preventDefault(); this.execCmd('italic'); }
+        if (e.key === 'u') { e.preventDefault(); this.execCmd('underline'); }
+      }
+    });
+  }
+
+  addBlock(type) {
+    const id = ++this.blockIdCounter;
+    const block = { id, type, content: '', placeholder: this.getPlaceholder(type) };
+    this.blocks.push(block);
+    this.renderBlocks();
+    this.updateHiddenInput();
+
+    // Focus the new block
+    requestAnimationFrame(() => {
+      const el = this.shadowRoot.querySelector(`[data-block-id="${id}"] .ge-content`);
+      if (el) el.focus();
+    });
+  }
+
+  getPlaceholder(type) {
+    const map = {
+      paragraph: 'Scrivi un paragrafo...',
+      h1: 'Titolo principale...',
+      h2: 'Sottotitolo...',
+      h3: 'Titolo di sezione...',
+      ul: 'Elemento della lista...',
+      ol: 'Elemento della lista...',
+      quote: 'Inserisci una citazione...',
+      code: '// Inserisci codice...',
+      image: 'URL dell\'immagine...',
+      divider: ''
+    };
+    return map[type] || 'Contenuto...';
+  }
+
+  renderBlocks() {
+    // Remove existing block elements (keep empty state)
+    this.shadowRoot.querySelectorAll('.ge-block').forEach(el => el.remove());
+
+    if (this.blocks.length === 0) {
+      this._blocksContainer.innerHTML = `
+        <div class="ge-empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <line x1="12" y1="8" x2="12" y2="16"/>
+            <line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+          Clicca sui pulsanti sopra per aggiungere blocchi.<br>
+          Trascina per riordinare, clicca per modificare.
+        </div>`;
+      return;
+    }
+
+    this.blocks.forEach(block => {
+      const blockEl = this.createBlockElement(block);
+      this._blocksContainer.appendChild(blockEl);
+    });
+
+    this.setupDragAndDrop();
+  }
+
+  createBlockElement(block) {
+    const div = document.createElement('div');
+    div.className = 'ge-block';
+    div.setAttribute('data-block-id', block.id);
+    div.setAttribute('draggable', 'true');
+
+    const typeLabels = {
+      paragraph: '¶ Paragrafo', h1: 'H1 Titolo', h2: 'H2 Titolo', h3: 'H3 Titolo',
+      ul: '• Lista', ol: '1. Lista', quote: '" Citazione', code: '< /> Codice',
+      image: '🖼 Immagine', divider: '— Divider'
+    };
+
+    let contentHTML = '';
+    let formatBarHTML = '';
+
+    if (block.type === 'divider') {
+      contentHTML = '<hr>';
+    } else if (block.type === 'image') {
+      contentHTML = `<img src="${block.content || 'https://via.placeholder.com/600x200?text=Immagine'}" alt="${block.content || 'immagine'}" style="max-width:100%;border-radius:4px;">`;
+      formatBarHTML = `
+        <div class="ge-image-controls">
+          <input type="text" placeholder="URL immagine..." value="${block.content || ''}" 
+                 onchange="this.closest('.ge-block').querySelector('img').src=this.value; this.closest('.ge-block').querySelector('img').alt=this.value; this.closest('[data-block-id]').__geEditor.updateBlockContent(${block.id}, this.value);"
+                 oninput="this.closest('.ge-block').querySelector('img').src=this.value; this.closest('.ge-block').querySelector('img').alt=this.value;">
+          <button onclick="this.closest('[data-block-id]').__geEditor.removeBlock(${block.id})">Rimuovi</button>
+        </div>`;
+    } else {
+      contentHTML = `<div class="ge-content" contenteditable="true" data-placeholder="${this.getPlaceholder(block.type)}" data-block-id="${block.id}">${block.content || ''}</div>`;
+
+      formatBarHTML = `
+        <div class="ge-format-bar">
+          <button onclick="this.closest('[data-block-id]').__geEditor.execCmd('bold')" title="Grassetto (Ctrl+B)"><b>B</b></button>
+          <button onclick="this.closest('[data-block-id]').__geEditor.execCmd('italic')" title="Corsivo (Ctrl+I)"><i>I</i></button>
+          <button onclick="this.closest('[data-block-id]').__geEditor.execCmd('underline')" title="Sottolineato (Ctrl+U)"><u>U</u></button>
+          <span class="sep"></span>
+          <button onclick="this.closest('[data-block-id]').__geEditor.execCmd('strikeThrough')" title="Barrato"><s>S</s></button>
+          <button onclick="this.closest('[data-block-id]').__geEditor.execCmd('insertUnorderedList')" title="Lista puntata">•</button>
+          <button onclick="this.closest('[data-block-id]').__geEditor.execCmd('insertOrderedList')" title="Lista numerata">1.</button>
+          <span class="sep"></span>
+          <button onclick="this.closest('[data-block-id]').__geEditor.execCmd('formatBlock', 'blockquote')" title="Citazione">"</button>
+          <button onclick="this.closest('[data-block-id]').__geEditor.execCmd('formatBlock', 'pre')" title="Blocco codice">&lt;/&gt;</button>
+          <span class="sep"></span>
+          <button onclick="this.closest('[data-block-id]').__geEditor.createLink()" title="Inserisci link">🔗</button>
+          <button onclick="this.closest('[data-block-id]').__geEditor.removeBlock(${block.id})" class="delete-btn" title="Elimina blocco">🗑</button>
+        </div>`;
+    }
+
+    div.innerHTML = `
+      <div class="ge-block-header">
+        <span class="ge-drag-handle" title="Trascina per riordinare">⋮⋮</span>
+        <span class="ge-block-type">${typeLabels[block.type] || block.type}</span>
+        <div class="ge-block-actions">
+          <button onclick="this.closest('[data-block-id]').__geEditor.duplicateBlock(${block.id})" title="Duplica">📋</button>
+          <button onclick="this.closest('[data-block-id]').__geEditor.removeBlock(${block.id})" class="delete-btn" title="Elimina">🗑</button>
+        </div>
+      </div>
+      ${formatBarHTML}
+      ${contentHTML}
+    `;
+
+    // Store reference to editor instance on the element
+    div.__geEditor = this;
+
+    // Setup content editable events
+    const contentEl = div.querySelector('.ge-content');
+    if (contentEl) {
+      contentEl.addEventListener('input', () => {
+        this.updateBlockContent(block.id, contentEl.innerHTML);
+        this.updateHiddenInput();
+      });
+
+      contentEl.addEventListener('keydown', (e) => {
+        // Enter creates new block (except in lists)
+        if (e.key === 'Enter' && !e.shiftKey && block.type !== 'listitem') {
+          e.preventDefault();
+          this.addBlock(block.type === 'quote' ? 'paragraph' : 
+                        block.type === 'code' ? 'paragraph' : 'paragraph');
+        }
+        // Backspace on empty deletes block
+        if (e.key === 'Backspace' && contentEl.innerHTML === '' && block.type !== 'image' && block.type !== 'divider') {
+          e.preventDefault();
+          this.removeBlock(block.id);
+        }
+      });
+    }
+
+    return div;
+  }
+
+  setupDragAndDrop() {
+    const blocks = this.shadowRoot.querySelectorAll('.ge-block');
+    let draggedBlock = null;
+
+    blocks.forEach(block => {
+      block.addEventListener('dragstart', (e) => {
+        draggedBlock = block;
+        block.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', block.getAttribute('data-block-id'));
+      });
+
+      block.addEventListener('dragend', () => {
+        block.classList.remove('dragging');
+        this.shadowRoot.querySelectorAll('.ge-block').forEach(b => b.classList.remove('drag-over'));
+        draggedBlock = null;
+      });
+
+      block.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (block !== draggedBlock) {
+          block.classList.add('drag-over');
+        }
+      });
+
+      block.addEventListener('dragleave', () => {
+        block.classList.remove('drag-over');
+      });
+
+      block.addEventListener('drop', (e) => {
+        e.preventDefault();
+        block.classList.remove('drag-over');
+        if (!draggedBlock || draggedBlock === block) return;
+
+        const fromId = parseInt(e.dataTransfer.getData('text/plain'));
+        const toId = parseInt(block.getAttribute('data-block-id'));
+
+        const fromIdx = this.blocks.findIndex(b => b.id === fromId);
+        const toIdx = this.blocks.findIndex(b => b.id === toId);
+
+        if (fromIdx !== -1 && toIdx !== -1) {
+          const [moved] = this.blocks.splice(fromIdx, 1);
+          this.blocks.splice(toIdx, 0, moved);
+          this.renderBlocks();
+          this.updateHiddenInput();
+        }
+      });
+    });
+  }
+
+  updateBlockContent(id, html) {
+    const block = this.blocks.find(b => b.id === id);
+    if (block) block.content = html;
+  }
+
+  removeBlock(id) {
+    this.blocks = this.blocks.filter(b => b.id !== id);
+    this.renderBlocks();
+    this.updateHiddenInput();
+  }
+
+  duplicateBlock(id) {
+    const block = this.blocks.find(b => b.id === id);
+    if (!block) return;
+    const newBlock = { ...block, id: ++this.blockIdCounter, content: block.content };
+    const idx = this.blocks.findIndex(b => b.id === id);
+    this.blocks.splice(idx + 1, 0, newBlock);
+    this.renderBlocks();
+    this.updateHiddenInput();
+  }
+
+  execCmd(command, value = null) {
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+
+    if (command === 'formatBlock') {
+      document.execCommand(command, false, `<${value}>`);
+    } else {
+      document.execCommand(command, false, value);
+    }
+
+    // Update block content
+    const activeEl = this.shadowRoot.querySelector('.ge-content:focus');
+    if (activeEl) {
+      this.updateBlockContent(parseInt(activeEl.getAttribute('data-block-id')), activeEl.innerHTML);
+      this.updateHiddenInput();
+    }
+  }
+
+  createLink() {
+    const url = prompt('Inserisci URL del link:', 'https://');
+    if (url) {
+      this.execCmd('createLink', url);
+    }
+  }
+
+  updateHiddenInput() {
+    const html = this.generateHTML();
+    if (this._hiddenInput) {
+      this._hiddenInput.value = html;
+    }
+    // Also dispatch event for external listeners
+    this.dispatchEvent(new CustomEvent('ge-change', { detail: html, bubbles: true }));
+  }
+
+  generateHTML() {
+    return this.blocks.map(block => {
+      switch (block.type) {
+        case 'paragraph':
+          return `<p>${block.content || ''}</p>`;
+        case 'h1':
+          return `<h1>${block.content || ''}</h1>`;
+        case 'h2':
+          return `<h2>${block.content || ''}</h2>`;
+        case 'h3':
+          return `<h3>${block.content || ''}</h3>`;
+        case 'ul':
+          return `<ul>${block.content || ''}</ul>`;
+        case 'ol':
+          return `<ol>${block.content || ''}</ol>`;
+        case 'quote':
+          return `<blockquote>${block.content || ''}</blockquote>`;
+        case 'code':
+          return `<pre><code>${block.content || ''}</code></pre>`;
+        case 'image':
+          return `<img src="${block.content || ''}" alt="immagine">`;
+        case 'divider':
+          return `<hr>`;
+        default:
+          return `<p>${block.content || ''}</p>`;
+      }
+    }).join('\n');
+  }
+
+  showHTML() {
+    const html = this.generateHTML();
+    this._outputContent.textContent = html;
+    this._outputPanel.style.display = this._outputPanel.style.display === 'none' ? 'block' : 'none';
+  }
+
+  // Public API
+  getHTML() { return this.generateHTML(); }
+  clear() { this.blocks = []; this.renderBlocks(); this.updateHiddenInput(); }
+}
+
+// Register the custom element
+customElements.define('gutenberg-editor', GutenbergEditor);
+
+// ============================================================
+// INIZIALIZZAZIONE ESEMPI
+// ============================================================
+
+// Esempio 1: Standalone
+const editor1 = document.getElementById('editor1');
+editor1.addEventListener('ge-change', (e) => {
+  console.log('HTML generato:', e.detail);
+});
+
+// Esempio 2: Dentro form
+const editor2 = document.getElementById('editor2');
+editor2.addEventListener('ge-change', (e) => {
+  document.getElementById('previewText').textContent = e.detail.substring(0, 200) + (e.detail.length > 200 ? '...' : '');
+});
+
+function handleSubmit(e) {
+  e.preventDefault();
+  const formData = new FormData(e.target);
+  const data = Object.fromEntries(formData.entries());
+
+  // Il campo "content" contiene l'HTML pulito!
+  console.log('📦 Dati inviati al server:', data);
+
+  alert(
+    '✅ Form inviato!\n\n' +
+    'Titolo: ' + (data.title || '(vuoto)') + '\n\n' +
+    'HTML generato (campo "content"):\n' +
+    (data.content || '(vuoto)').substring(0, 300) + (data.content && data.content.length > 300 ? '...' : '') +
+    '\n\n' +
+    '👉 In un\'app reale, questo verrebbe inviato al server via POST/fetch.'
+  );
+}
+</script>
+
+</body>
+</html>

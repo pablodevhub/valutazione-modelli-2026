@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Viewer</title>
+
+    <!-- Highlight.js per il syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <!-- Marked.js per il parsing Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #1a1a2e;
+            color: #eee;
+        }
+
+        header {
+            background: #16213e;
+            padding: 12px 24px;
+            text-align: center;
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            border-bottom: 2px solid #0f3460;
+            text-transform: uppercase;
+        }
+
+        header span {
+            color: #e94560;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ─── PANEL COMUNE ─── */
+        .panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: #0f3460;
+            padding: 10px 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 2px solid #1a1a2e;
+        }
+
+        .panel-header .icon {
+            margin-right: 8px;
+        }
+
+        /* ─── EDITOR (SINISTRA) ─── */
+        #editor-wrapper {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #editor {
+            width: 100%;
+            height: 100%;
+            resize: none;
+            border: none;
+            outline: none;
+            background: #1e1e3f;
+            color: #d4d4d4;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            padding: 20px;
+            tab-size: 4;
+            overflow-y: auto;
+        }
+
+        #editor::placeholder {
+            color: #555;
+        }
+
+        /* Overlay syntax highlighting (simula un editor colorato) */
+        #highlight-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            pointer-events: none;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow: hidden;
+            color: transparent;
+            tab-size: 4;
+        }
+
+        #highlight-overlay .hljs {
+            background: transparent !important;
+            padding: 0 !important;
+        }
+
+        /* ─── PREVIEW (DESTRA) ─── */
+        #preview {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 32px;
+            background: #222244;
+            line-height: 1.8;
+        }
+
+        /* Stili per il markdown renderizzato */
+        #preview h1 { font-size: 2em; border-bottom: 2px solid #e94560; padding-bottom: 10px; margin: 20px 0 15px; color: #e94560; }
+        #preview h2 { font-size: 1.6em; border-bottom: 1px solid #0f3460; padding-bottom: 8px; margin: 18px 0 12px; color: #e94560; }
+        #preview h3 { font-size: 1.3em; margin: 16px 0 10px; color: #ff6b81; }
+        #preview h4 { font-size: 1.1em; margin: 14px 0 8px; color: #ff8fa3; }
+
+        #preview p { margin: 10px 0; }
+
+        #preview a { color: #00d2ff; text-decoration: none; border-bottom: 1px solid #00d2ff55; }
+        #preview a:hover { color: #00f5ff; border-bottom-color: #00f5ff; }
+
+        #preview code {
+            background: #1a1a2e;
+            color: #ff6b6b;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-family: 'Consolas', monospace;
+        }
+
+        #preview pre {
+            background: #1a1a2e;
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 14px 0;
+            border-left: 4px solid #e94560;
+        }
+
+        #preview pre code {
+            background: transparent;
+            color: #d4d4d4;
+            padding: 0;
+            font-size: 0.9em;
+        }
+
+        #preview blockquote {
+            border-left: 4px solid #e94560;
+            padding: 10px 20px;
+            margin: 14px 0;
+            background: #1a1a2e88;
+            border-radius: 0 8px 8px 0;
+            color: #bbb;
+        }
+
+        #preview ul, #preview ol { padding-left: 24px; margin: 10px 0; }
+        #preview li { margin: 4px 0; }
+
+        #preview table { border-collapse: collapse; width: 100%; margin: 14px 0; }
+        #preview th, #preview td { border: 1px solid #0f3460; padding: 10px 14px; text-align: left; }
+        #preview th { background: #0f3460; color: #e94560; }
+        #preview tr:nth-child(even) { background: #1a1a2e44; }
+
+        #preview img { max-width: 100%; border-radius: 8px; margin: 10px 0; }
+
+        #preview hr { border: none; border-top: 2px solid #0f3460; margin: 20px 0; }
+
+        #preview input[type="checkbox"] { margin-right: 8px; accent-color: #e94560; }
+
+        /* ─── RESIZE HANDLE ─── */
+        .resizer {
+            width: 6px;
+            background: #0f3460;
+            cursor: col-resize;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .resizer:hover, .resizer.active {
+            background: #e94560;
+        }
+
+        .resizer::after {
+            content: '⋮⋮⋮';
+            color: #555;
+            font-size: 12px;
+            letter-spacing: 2px;
+        }
+
+        .resizer:hover::after {
+            color: #fff;
+        }
+
+        /* ─── SCROLLBAR ─── */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1a1a2e; }
+        ::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #e94560; }
+
+        /* ─── RESPONSIVE ─── */
+        @media (max-width: 768px) {
+            .container { flex-direction: column; }
+            .resizer { width: 100%; height: 6px; cursor: row-resize; }
+            .resizer::after { content: '⋯⋯⋯'; letter-spacing: 4px; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>📝 <span>Markdown</span> Viewer</header>
+
+    <div class="container">
+        <!-- EDITOR -->
+        <div class="panel" id="editor-panel">
+            <div class="panel-header"><span class="icon">✏️</span> Editor Markdown</div>
+            <div id="editor-wrapper">
+                <textarea id="editor" spellcheck="false" placeholder="Scrivi il tuo markdown qui...
+
+# Esempio Markdown
+
+## Formattazione
+
+**grassetto**, *corsivo*, ~~barrato~~
+
+## Lista
+- Elemento 1
+- Elemento 2
+  - Sotto-elemento
+
+## Codice
+\`\`\`javascript
+console.log('Ciao Mondo!');
+\`\`\`
+
+## Link e Immagini
+[Google](https://google.com)
+
+## Tabella
+| Nome   | Età |
+|--------|-----|
+| Mario  | 25  |
+| Luigi  | 30  |
+
+> Questo è un blocco citazione
+"></textarea>
+                <div id="highlight-overlay"><pre><code class="language-markdown"></code></pre></div>
+            </div>
+        </div>
+
+        <!-- RESIZE HANDLE -->
+        <div class="resizer" id="resizer"></div>
+
+        <!-- PREVIEW -->
+        <div class="panel" id="preview-panel">
+            <div class="panel-header"><span class="icon">👁️</span> Anteprima</div>
+            <div id="preview"></div>
+        </div>
+    </div>
+
+    <script>
+        const editor       = document.getElementById('editor');
+        const overlay      = document.getElementById('highlight-overlay');
+        const overlayCode  = overlay.querySelector('code');
+        const preview      = document.getElementById('preview');
+        const resizer      = document.getElementById('resizer');
+        const editorPanel  = document.getElementById('editor-panel');
+        const previewPanel = document.getElementById('preview-panel');
+
+        let debounceTimer;
+
+        // ── Configurazione marked ──
+        marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+
+        // ── Funzione aggiorna preview ──
+        function updatePreview() {
+            const markdown = editor.value;
+            preview.innerHTML = marked.parse(markdown);
+        }
+
+        // ── Funzione aggiorna syntax highlighting ──
+        function updateHighlight() {
+            const markdown = editor.value;
+            overlayCode.textContent = markdown;
+            hljs.highlightElement(overlayCode);
+        }
+
+        // ── Debounced update ──
+        function debouncedUpdate() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                updatePreview();
+                updateHighlight();
+            }, 150);
+        }
+
+        // ── Eventi editor ──
+        editor.addEventListener('input', debouncedUpdate);
+
+        // ── Tab key support ──
+        editor.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = editor.selectionStart;
+                const end   = editor.selectionEnd;
+                editor.value = editor.value.substring(0, start) + '    ' + editor.value.substring(end);
+                editor.selectionStart = editor.selectionEnd = start + 4;
+                debouncedUpdate();
+            }
+        });
+
+        // ── Resize draggable ──
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+
+            const containerWidth = document.querySelector('.container').offsetWidth;
+            const editorWidth = e.clientX;
+            const previewWidth = containerWidth - editorWidth - 6; // 6 = resizer width
+
+            if (editorWidth > 150 && previewWidth > 150) {
+                editorPanel.style.flex = `0 0 ${editorWidth}px`;
+                previewPanel.style.flex = `0 0 ${previewWidth}px`;
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isResizing = false;
+            resizer.classList.remove('active');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        });
+
+        // ── Init ──
+        updatePreview();
+        updateHighlight();
+    </script>
+
+</body>
+</html>
